@@ -1,0 +1,1 @@
+worker: python timur_bot.py
