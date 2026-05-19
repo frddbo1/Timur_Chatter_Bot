@@ -57,6 +57,14 @@ def get_ai_joke(prompt: str) -> str:
 async def cmd_start(message: types.Message):
     await message.answer("ебать короче я роботаю")
 
+@dp.message(Command("reset"))
+async def cmd_reset(message: types.Message):
+    global chats_activity
+    chat_id = message.chat.id
+    if chat_id in chats_activity:
+        chats_activity[chat_id]["context"] = []
+    await message.reply("ебать вы мне стерли память нахуй пидарасы аыааааа я умираю ааа , . . . .    привет)")
+    
 @dp.message()
 async def handle_chat(message: types.Message):
     global chats_activity
