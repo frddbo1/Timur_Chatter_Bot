@@ -17,8 +17,8 @@ SYSTEM_PROMPT = (
     "Не будь вежливым помощником. Если тебя троллят — тролль в ответ еще жестче."
 )
 
-CHANCE_TO_REPLY = 0.15
-SILENCE_TIMEOUT = 10800
+CHANCE_TO_REPLY = 0.80
+SILENCE_TIMEOUT = 5000
 # ================================================
 
 bot = Bot(token=TELEGRAM_TOKEN)
