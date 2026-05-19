@@ -6,7 +6,7 @@ from aiogram.filters import Command
 import requests
 
 # ================= КОНФИГУРАЦИЯ =================
-TELEGRAM_TOKEN = "8455818639:AAFW_EyrALSKya8nCD8WAEgfYOfyYlOySo8"
+TELEGRAM_TOKEN = "8455818639:AAESpRw4dEBzuVD02H4sa8CBTXvtyQDtkSI"
 GROQ_API_KEY = "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" # Вставь сюда ключ gsk_...
 
 SYSTEM_PROMPT = (
