@@ -7,7 +7,7 @@ import requests
 
 # ================= КОНФИГУРАЦИЯ =================
 TELEGRAM_TOKEN = "8455818639:AAHFlCH-KKecRl2XMx2s_tovmg4D9NmPUMY"
-HF_API_KEY = "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" # Пример: hf_...
+HF_API_KEY = "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" # Пример: hf_...
 
 SYSTEM_PROMPT = (
     "Ты — участник локального дружеского чата в Telegram, мастер постиронии, сарказма и рофлов. "
