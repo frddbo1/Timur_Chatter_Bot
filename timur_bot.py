@@ -6,8 +6,8 @@ from aiogram.filters import Command
 import requests
 
 # ================= КОНФИГУРАЦИЯ =================
-TELEGRAM_TOKEN = "8455818639:AAHFlCH-KKecRl2XMx2s_tovmg4D9NmPUMY"
-HF_API_KEY = "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" # Пример: hf_...
+TELEGRAM_TOKEN = "8455818639:AAGm0JLzucW69_wZHwgau_aBX6Pc6Zl1azY"
+GROQ_API_KEY = "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" # Вставь сюда ключ gsk_...
 
 SYSTEM_PROMPT = (
     "Ты — участник локального дружеского чата в Telegram, мастер постиронии, сарказма и рофлов. "
@@ -17,8 +17,8 @@ SYSTEM_PROMPT = (
     "Не будь вежливым помощником. Если тебя троллят — тролль в ответ еще жестче."
 )
 
-CHANCE_TO_REPLY = 0.80
-SILENCE_TIMEOUT = 5000
+CHANCE_TO_REPLY = 0.15
+SILENCE_TIMEOUT = 10800
 # ================================================
 
 bot = Bot(token=TELEGRAM_TOKEN)
@@ -26,39 +26,36 @@ dp = Dispatcher()
 chats_activity = {}
 
 def get_ai_joke(prompt: str) -> str:
-    """Запрос к бесплатным моделям Hugging Face (Llama 3)"""
-    # Используем мощную открытую модель Llama-3-8B-Instruct
-    API_URL = "https://api-inference.huggingface.co/meta-llama/Meta-Llama-3-8B"
-    headers = {"Authorization": f"Bearer {HF_API_KEY}"}
-    
-    # Формируем правильный запрос для текстовой модели
-    full_prompt = f"<|system|>\n{SYSTEM_PROMPT}\n<|user|>\n{prompt}\n<|assistant|>\n"
-    
+    """Официальный и стабильный запрос к Groq API (Llama 3)"""
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
     payload = {
-        "inputs": full_prompt,
-        "parameters": {
-            "max_new_tokens": 100,
-            "temperature": 0.9,
-            "return_full_text": False
-        }
+        "model": "llama3-8b-8192", # Быстрая и умная модель от Meta
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 1.0,
+        "max_tokens": 150
     }
     
     try:
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=10)
+        response = requests.post(url, headers=headers, json=payload, timeout=10)
         result = response.json()
         
-        # Если модель отвечает списком
-        if isinstance(result, list) and len(result) > 0:
-            return result[0].get('generated_text', '').strip()
-        # Если модель выдает ошибку, что она загружается (такое бывает при первом запросе)
-        elif isinstance(result, dict) and "estimated_time" in result:
-            return "ща, погоди, мысль формулирую..."
+        # Проверяем, вернул ли сервер ответ
+        if "choices" in result:
+            return result["choices"][0]["message"]["content"].strip()
         else:
-            print(f"Неожиданный ответ API: {result}")
-            return "не понял че ты высрал, давай заново"
+            print(f"Ошибка Groq API: {result}")
+            return "чето у меня в глазах потемнело, повтори"
+            
     except Exception as e:
-        print(f"Ошибка ИИ: {e}")
-        return "у меня чето сервак поплыл, помянем"
+        print(f"Критическая ошибка: {e}")
+        return "сервер лег, расходимся"
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -94,7 +91,7 @@ async def handle_chat(message: types.Message):
         prompt = f"Контекст беседы:\n{chat_history}\n\nОтветь на последнее сообщение коротким рофлом."
         
         await bot.send_chat_action(chat_id=chat_id, action="typing")
-        await asyncio.sleep(random.uniform(1, 2))
+        await asyncio.sleep(random.uniform(0.5, 1.5))
         
         joke = get_ai_joke(prompt)
         await message.reply(joke)
