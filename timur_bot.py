@@ -33,7 +33,7 @@ def get_ai_joke(prompt: str) -> str:
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "llama3-8b-8192", # Быстрая и умная модель от Meta
+        "model": "llama-3.1-8b-instant", # Быстрая и умная модель от Meta
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt}
