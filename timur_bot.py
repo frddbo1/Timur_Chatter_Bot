@@ -53,15 +53,15 @@ def get_ai_joke(prompt: str) -> str:
             return result["choices"][0]["message"]["content"].strip()
         else:
             print(f"Ошибка Groq API: {result}")
-            return "чето у меня в глазах потемнело, повтори"
+            return "ебать че то я тупой не понимаю нихуя я сломался"
             
     except Exception as e:
         print(f"Критическая ошибка: {e}")
-        return "сервер лег, расходимся"
+        return "сервер лег ебать ахахахпвщпаъх"
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    await message.answer("салам. добавь меня в группу, выруби privacy mode в BotFather и я устрою там суету.")
+    await message.answer("ебать короче я роботаю")
 
 @dp.message()
 async def handle_chat(message: types.Message):
@@ -90,7 +90,7 @@ async def handle_chat(message: types.Message):
 
     if is_mentioned or is_reply_to_bot or random_strike:
         chat_history = "\n".join(chats_activity[chat_id]["context"])
-        prompt = f"Контекст беседы:\n{chat_history}\n\nОтветь на последнее сообщение коротким рофлом."
+        prompt = f"Контекст беседы:\n{chat_history}\n\nОтветь на последнее сообщение."
         
         await bot.send_chat_action(chat_id=chat_id, action="typing")
         await asyncio.sleep(random.uniform(0.5, 1.5))
