@@ -28,7 +28,7 @@ chats_activity = {}
 def get_ai_joke(prompt: str) -> str:
     """Запрос к бесплатным моделям Hugging Face (Llama 3)"""
     # Используем мощную открытую модель Llama-3-8B-Instruct
-    API_URL = "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct"
+    API_URL = "https://api-inference.huggingface.co/meta-llama/Meta-Llama-3-8B"
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
     
     # Формируем правильный запрос для текстовой модели
