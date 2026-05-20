@@ -1,4 +1,3 @@
 aiogram
 streamlit
 requests
-psutil
