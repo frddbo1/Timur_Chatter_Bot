@@ -15,13 +15,15 @@ logging.basicConfig(level=logging.INFO)
 TELEGRAM_TOKEN = "8455818639:AAEvMCnXthyxT-UMMvzwd1WRKAa3BMqdkQ0"
 GROQ_API_KEY = "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"
 
-# ⚠️ ПЕРЕПРОВЕРЬ ЭТОТ КЛЮЧ! В логах пишет 401 (Неверный ключ). Скопируй его заново с сайта OpenRouter!
+# ⚠️ ВНИМАНИЕ: Если здесь будет неверный ключ, OpenRouter выдаст ошибку 401!
+# Если бесплатная модель Gemini не требует токена, можно попробовать оставить, 
+# но лучше вставить реальный рабочий ключ.
 OPENROUTER_API_KEY = "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"
 
-PRIMARY_MODEL = "llama-3.3-70b-specdec" # НОВАЯ ЖИВАЯ МОДЕЛЬ НА GROQ
-FALLBACK_MODEL = "meta-llama/llama-3.1-8b-instruct:free" 
+PRIMARY_MODEL = "llama-3.3-70b-versatile"        # АКТУАЛЬНАЯ РАБОЧАЯ МОДЕЛЬ GROQ
+FALLBACK_MODEL = "google/gemini-2.5-flash:free"  # СВЕЖИЙ БЕСПЛАТНЫЙ РЕЗЕРВ
 
-CURRENT_VERSION = "v10_final_fixed_models"
+CURRENT_VERSION = "v11_fix_2026_models"
 
 SYSTEM_PROMPT = (
     "Ты — 14-летний подросток по имени Тимур. Ты сидишь в локальном групповом чате с друзьями в Telegram. "
@@ -32,7 +34,6 @@ SYSTEM_PROMPT = (
 )
 
 CHANCE_TO_REPLY = 0.30  
-SILENCE_TIMEOUT = 3000
 # ================================================
 
 if "CHATS_ACTIVITY" not in globals():
@@ -43,9 +44,9 @@ if "LAST_REPLY_TIME" not in globals():
 # Жестко перезаписываем глобальную версию
 globals()["GLOBAL_VERSION"] = CURRENT_VERSION
 
-st.title("🤖 Панель управления Тимуром [V10-Финал]")
-st.subheader("Статус: Модели обновлены")
-st.write(f"Активная версия: **{CURRENT_VERSION}**")
+st.title("🤖 Управление Тимуром [V11]")
+st.write(f"Активная версия скрипта: **{CURRENT_VERSION}**")
+st.info("Переключено на модели: llama-3.3-70b-versatile и Gemini 2.5 Flash")
 
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
@@ -63,7 +64,7 @@ LOCAL_REPLIES = [
 ]
 
 def get_ai_joke(prompt: str) -> str:
-    # 1. ЗАПРОС К GROQ (Новая рабочая модель)
+    # 1. ЗАПРОС К GROQ
     url_groq = "https://api.groq.com/openai/v1/chat/completions"
     headers_groq = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
     payload_groq = {
@@ -72,7 +73,7 @@ def get_ai_joke(prompt: str) -> str:
         "temperature": 1.2, "max_tokens": 100
     }
     try:
-        logging.info(f"--> [Groq] Запрос к новой модели {PRIMARY_MODEL}...")
+        logging.info(f"--> [Groq] Запрос к {PRIMARY_MODEL}...")
         response = requests.post(url_groq, headers=headers_groq, json=payload_groq, timeout=8)
         result = response.json()
         if "choices" in result:
@@ -92,7 +93,7 @@ def get_ai_joke(prompt: str) -> str:
         "temperature": 1.2, "max_tokens": 100
     }
     try:
-        logging.info("--> [OpenRouter] Пробую резерв...")
+        logging.info(f"--> [OpenRouter] Пробую резерв {FALLBACK_MODEL}...")
         response = requests.post(url_or, headers=headers_or, json=payload_or, timeout=8)
         result = response.json()
         if "choices" in result:
@@ -113,7 +114,7 @@ async def cmd_start(message: types.Message):
 async def handle_chat(message: types.Message):
     global CHATS_ACTIVITY, LAST_REPLY_TIME
     
-    # СТОП-КРАН: Если этот поток старый — он мгновенно завершает работу
+    # СТОП-КРАН для защиты от старых запущенных потоков
     if globals().get("GLOBAL_VERSION") != CURRENT_VERSION:
         return
 
@@ -157,21 +158,30 @@ async def handle_chat(message: types.Message):
         delay = max(1.5, min(4.0, len(joke) / 25))
         await asyncio.sleep(delay)
         
-        # Еще одна проверка перед отправкой, чтобы старые копии помалкивали
         if globals().get("GLOBAL_VERSION") == CURRENT_VERSION:
             try:
                 await message.reply(joke)
             except Exception as e:
                 logging.error(f"Ошибка отправки: {e}")
 
+async def run_bot():
+    # Перед стартом принудительно сбрасываем старые зависшие сессии Telegram
+    try:
+        await bot.delete_webhook(drop_pending_updates=True)
+        logging.info("--> [Telegram] Вебхуки очищены, старые обновления сброшены.")
+    except Exception as e:
+        logging.error(f"Не удалось сбросить вебхук: {e}")
+        
+    await dp.start_polling(bot, handle_signals=False)
+
 def start_bot_thread():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.run_until_complete(dp.start_polling(bot, handle_signals=False))
+    loop.run_until_complete(run_bot())
 
-# Запуск строго одного потока на сессию Streamlit
+# Запуск строго одной фоновой нити на эту версию в Streamlit
 if f"bot_thread_{CURRENT_VERSION}" not in st.session_state:
     st.session_state[f"bot_thread_{CURRENT_VERSION}"] = True
     t = threading.Thread(target=start_bot_thread, daemon=True)
     t.start()
-    logging.info(f"--> [Запуск] Поток {CURRENT_VERSION} успешно поднят.")
+    logging.info(f"--> [Запуск] Поток {CURRENT_VERSION} запущен.")
