@@ -5,7 +5,7 @@ import logging
 import threading
 from datetime import datetime
 import streamlit as st
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 import requests
 
@@ -30,7 +30,7 @@ SYSTEM_PROMPT = (
 CHANCE_TO_REPLY = 0.30  
 # ================================================
 
-st.title("🤖 Тимур Bot [V18 - Медиа и Триггер Фикс]")
+st.title("🤖 Тимур Bot [V19 - Фикс Медиа Хэндлера]")
 
 if "CHATS_ACTIVITY" not in globals():
     globals()["CHATS_ACTIVITY"] = {}
@@ -126,7 +126,8 @@ dp = Dispatcher()
 async def cmd_start(message: types.Message):
     await message.answer("ебать короче я роботаю")
 
-@dp.message()
+# ТЕПЕРЬ ТУТ СТОИТ F.any() — ЭТО ЗАСТАВИТ БОТА ВИДЕТЬ КАРТИНКИ, ГИФКИ И СТИКЕРЫ
+@dp.message(F.any())
 async def handle_chat(message: types.Message):
     if not globals().get("BOT_RUNNING_STATE", False):
         return
