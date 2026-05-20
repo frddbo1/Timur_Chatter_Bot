@@ -9,14 +9,14 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 import requests
 
-# Включаем детальные логи в консоль Streamlit, чтобы видеть каждое действие бота
+# Включаем детальные логи в консоль Streamlit
 logging.basicConfig(level=logging.INFO)
 
 # ================= КОНФИГУРАЦИЯ =================
 TELEGRAM_TOKEN = "8455818639:AAEvMCnXthyxT-UMMvzwd1WRKAa3BMqdkQ0"
 GROQ_API_KEY = "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"
 
-# СЮДА ВСТАВЬ СВОЙ КЛЮЧ ОТ OPENROUTER (создай бесплатно на openrouter.ai)
+# СЮДА ВСТАВЬ СВОЙ КЛЮЧ ОТ OPENROUTER
 OPENROUTER_API_KEY = "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"
 
 PRIMARY_MODEL = "llama-3.1-70b-versatile" # Умная модель на Groq
@@ -47,10 +47,23 @@ st.title("🤖 Панель управления Тимуром [Безотка�
 st.subheader("Статус: Активен (Фоновый поток Python 3.14)")
 st.write(f"Основной движок: **Groq (Llama 70B)**")
 st.write(f"Резервный движок: **OpenRouter (Llama 8B Free)**")
-st.write(f"Локальный фолбек: **Активен (10 готовых фраз)**")
 
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
+
+# ЛОКАЛЬНАЯ БАЗА ПАЦАНСКИХ ФРАЗ (ЕСЛИ ВСЕ СЕРВЕРА УПАЛИ)
+LOCAL_REPLIES = [
+    "че ты высрал вообще я нихуя не понял",
+    "ебать ты умный конечно завали ебало пж",
+    "ахахаха че за бред",
+    "мне похуй ладно",
+    "ты че доебался до меня че надо",
+    "ясно автор дебил",
+    "ебать ты выдал конечно",
+    "че за хуйню я щас прочитал",
+    "ладно забей",
+    "поясни за базар че ты несешь вообще"
+]
 
 def get_ai_joke(prompt: str) -> str:
     """Запрос с обходом лимитов через два разных провайдера + локальный фолбек"""
@@ -80,7 +93,7 @@ def get_ai_joke(prompt: str) -> str:
             logging.info("--> [Groq Успех] Ответила 70B")
             return result["choices"][0]["message"]["content"].strip()
             
-        logging.warning(f"--> [Groq Ограничение/Лимит] Ответ сервера: {result}. Иду в OpenRouter...")
+        logging.warning("--> [Groq Ограничение/Лимит]. Иду в OpenRouter...")
     except Exception as e:
         logging.error(f"--> [Groq Ошибка сети]: {e}. Переключаюсь на OpenRouter...")
 
@@ -113,21 +126,9 @@ def get_ai_joke(prompt: str) -> str:
     except Exception as e:
         logging.error(f"--> [OpenRouter Ошибка сети]: {e}")
 
-    # 3. УЛЬТИМАТИВНЫЙ ЛОКАЛЬНЫЙ ФОЛБЕК (Если упал весь интернет и все ключи забанены)
+    # 3. УЛЬТИМАТИВНЫЙ ЛОКАЛЬНЫЙ ФОЛБЕК (Если всё легло)
     logging.warning("--> [ФОЛБЕК] Все нейросети лежат. Выдаю фразу из локальной базы.")
-    local_replies = [
-        "че ты высрал вообще я нихуя не понял",
-        "ебать ты умный конечно завали ебало пж",
-        "ахахаха че за бред",
-        "мне похуй ладно",
-        "ты че доебался до меня че надо",
-        "ясно автор дебил",
-        "ебать ты выдал конечно",
-        "че за хуйню я щас прочитал",
-        "ладно забей",
-        "поясни за базар че ты несешь вообще"
-    ]
-    return random.choice(local_replies)
+    return random.choice(LOCAL_REPLIES)
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -146,13 +147,11 @@ async def handle_chat(message: types.Message):
     global CHATS_ACTIVITY, LAST_REPLY_TIME
     chat_id = message.chat.id
     
-    # Работаем только в группах, игнорируем личку и других ботов
     if message.chat.type not in ["group", "supergroup"] or (message.from_user and message.from_user.is_bot):
         return
     if not message.text:
         return
 
-    # Запись контекста беседы
     if chat_id not in CHATS_ACTIVITY:
         CHATS_ACTIVITY[chat_id] = {"last_message_time": datetime.now(), "context": []}
     
@@ -161,7 +160,6 @@ async def handle_chat(message: types.Message):
     user = message.from_user.first_name if message.from_user else "Кто-то"
     CHATS_ACTIVITY[chat_id]["context"].append(f"{user}: {message.text}")
     
-    # Держим последние 5 сообщений
     if len(CHATS_ACTIVITY[chat_id]["context"]) > 5:
         CHATS_ACTIVITY[chat_id]["context"].pop(0)
 
@@ -176,9 +174,7 @@ async def handle_chat(message: types.Message):
         current_time = time.time()
         last_time = LAST_REPLY_TIME.get(chat_id, 0)
         
-        # Кулдаун 4 секунды
         if current_time - last_time < 4.0:
-            logging.info(f"--> Пропуск из-за кулдауна в чате {chat_id}")
             return  
 
         LAST_REPLY_TIME[chat_id] = current_time
@@ -188,18 +184,15 @@ async def handle_chat(message: types.Message):
         await bot.send_chat_action(chat_id=chat_id, action="typing")
         joke = get_ai_joke(prompt)
         
-        # Имитация набора текста
         delay = max(1.5, min(4.0, len(joke) / 25))
         await asyncio.sleep(delay)
         
         try:
             await message.reply(joke)
-            logging.info(f"--> Ответ отправлен!")
         except Exception as e:
             logging.error(f"Ошибка отправки: {e}")
 
 async def silence_checker():
-    """Фоновый таймер тишины"""
     while True:
         await asyncio.sleep(60)
         now = datetime.now()
@@ -220,9 +213,8 @@ def start_bot_thread():
     loop.create_task(silence_checker())
     loop.run_until_complete(dp.start_polling(bot, handle_signals=False))
 
-# Запуск фонового треда один раз за сессию
 if "bot_thread" not in st.session_state:
     st.session_state.bot_thread = True
     t = threading.Thread(target=start_bot_thread, daemon=True)
     t.start()
-    logging.info("Фоновый поток полностью инициализирован.")
+    logging.info("Фоновый поток запущен.")
