@@ -1,3 +1,4 @@
+import shared_data
 import asyncio
 import random
 import time
@@ -30,12 +31,13 @@ SYSTEM_PROMPT = (
 CHANCE_TO_REPLY = 0.30  
 # ================================================
 
-st.title("🤖 Тимур Bot [V22 - Жесткая регистрация]")
+st.title("🤖 Тимур Bot [V23 - Фикс Контекста Потоков]")
 
-if "CHATS_ACTIVITY" not in st.session_state:
-    st.session_state["CHATS_ACTIVITY"] = {}
-if "LAST_REPLY_TIME" not in st.session_state:
-    st.session_state["LAST_REPLY_TIME"] = {}
+# Локальный словарь для защиты от флуда, независимый от сессий Streamlit
+if "LOCAL_LAST_REPLY_TIME" not in globals():
+    global LOCAL_LAST_REPLY_TIME
+    LOCAL_LAST_REPLY_TIME = {}
+
 if "BOT_STOP_EVENT" not in st.session_state:
     st.session_state["BOT_STOP_EVENT"] = None
 
@@ -134,7 +136,8 @@ async def handle_chat(message: types.Message):
 
     logging.info(f"!!! БОТ УВИДЕЛ СООБЩЕНИЕ ({content_type}): '{msg_log_text}' от {user_name}")
 
-    activity = st.session_state["CHATS_ACTIVITY"]
+    # ИСПОЛЬЗУЕМ СЛОВАРЬ ИЗ shared_data ВМЕСТО st.session_state
+    activity = shared_data.CHATS_ACTIVITY
     if chat_id not in activity:
         activity[chat_id] = {"last_message_time": datetime.now(), "context": []}
     
@@ -146,7 +149,6 @@ async def handle_chat(message: types.Message):
     if len(activity[chat_id]["context"]) > 5:
         activity[chat_id]["context"].pop(0)
 
-    # Динамически берем бота из контекста апдейта, чтобы не привязываться к глобальным переменным потоков
     bot = message.bot
     bot_info = await bot.get_me()
     text_lower = msg_log_text.lower()
@@ -158,12 +160,15 @@ async def handle_chat(message: types.Message):
 
     if is_mentioned_via_dog or is_reply_to_bot or is_name_called or random_strike:
         current_time = time.time()
-        last_time = st.session_state["LAST_REPLY_TIME"].get(chat_id, 0)
+        
+        # Защита от флуда на базе глобального словаря процесса
+        global LOCAL_LAST_REPLY_TIME
+        last_time = LOCAL_LAST_REPLY_TIME.get(chat_id, 0)
         
         if current_time - last_time < 2:
             return  
 
-        st.session_state["LAST_REPLY_TIME"][chat_id] = current_time
+        LOCAL_LAST_REPLY_TIME[chat_id] = current_time
         
         try:
             await bot.send_chat_action(chat_id=chat_id, action="typing")
@@ -191,9 +196,8 @@ def start_bot_thread(stop_signal):
     bot = Bot(token=TELEGRAM_TOKEN)
     dp = Dispatcher()
 
-    # ЯВНАЯ РЕГИСТРАЦИЯ ХЭНДЛЕРОВ (без декораторов)
     dp.message.register(cmd_start, Command("start"))
-    dp.message.register(handle_chat) # Ловит вообще ВСЕ, так как идет вторым без фильтров
+    dp.message.register(handle_chat) 
 
     async def check_stop_signal():
         while not stop_signal.is_set():
@@ -207,7 +211,6 @@ def start_bot_thread(stop_signal):
             await bot.delete_webhook(drop_pending_updates=True)
             logging.info("--> [Telegram API] Очередь очищена.")
             
-            # Принудительно слушаем все типы апдейтов
             await asyncio.gather(
                 dp.start_polling(bot, handle_signals=False, allowed_updates=["message", "edited_message"]),
                 check_stop_signal()
@@ -249,3 +252,14 @@ with col2:
         st.warning("Отправлен сигнал на выключение. Поток уничтожается...")
         time.sleep(2.0)
         st.rerun()
+
+# --- ДОПОЛНИТЕЛЬНО: МОНИТОРИНГ ИЗ SHARED_DATA ---
+st.write("---")
+st.subheader("📊 Активность чатов (Мониторинг)")
+if shared_data.CHATS_ACTIVITY:
+    st.json(shared_data.CHATS_ACTIVITY)
+else:
+    st.info("Пока логов нет. Напиши боту в Telegram, чтобы здесь появился контекст.")
+
+if st.button("🔄 Обновить логи в панели"):
+    st.rerun()
