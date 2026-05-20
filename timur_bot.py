@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 # ================= КОНФИГУРАЦИЯ =================
 TELEGRAM_TOKEN = "8455818639:AAEvMCnXthyxT-UMMvzwd1WRKAa3BMqdkQ0"
 GROQ_API_KEY = "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"
-OPENROUTER_API_KEY = "sk-or-v1-ТВОЙ_РАБОЧИЙ_КЛЮЧ_ОТ_OPENROUTER_СЮДА"
+OPENROUTER_API_KEY = "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"
 
 PRIMARY_MODEL = "llama-3.3-70b-versatile"        
 FALLBACK_MODEL = "google/gemini-2.5-flash:free"  
@@ -30,9 +30,8 @@ SYSTEM_PROMPT = (
 CHANCE_TO_REPLY = 0.30  
 # ================================================
 
-st.title("🤖 Тимур Bot [V16 - Стопроцентный Триггер]")
+st.title("🤖 Тимур Bot [V18 - Медиа и Триггер Фикс]")
 
-# Инициализируем глобальные словари в оперативной памяти процесса
 if "CHATS_ACTIVITY" not in globals():
     globals()["CHATS_ACTIVITY"] = {}
 if "LAST_REPLY_TIME" not in globals():
@@ -40,11 +39,9 @@ if "LAST_REPLY_TIME" not in globals():
 if "BOT_RUNNING_STATE" not in globals():
     globals()["BOT_RUNNING_STATE"] = False
 
-# Проверяем, крутится ли уже активный поток бота в ОС
 active_threads = [t.name for t in threading.enumerate()]
 is_thread_alive = "TimurThread" in active_threads
 
-# Синхронизируем внутренний статус
 if is_thread_alive:
     globals()["BOT_RUNNING_STATE"] = True
 else:
@@ -64,12 +61,11 @@ LOCAL_REPLIES = [
     "да иди ты нахуй со своими историями"
 ]
 
-# ПРЕСЕТЫ ОТВЕТОВ НА МЕДИА
 PHOTO_REPLIES = [
     "нахуй ты своего батю кидаешь выблядь",
     "нахуй ты мне это скинул даунище",
     "нахуй ты мне это скинула дура",
-    "норм фотокарточка",
+    "норм photoкарточка",
     "у меня глаза горят от этой поеботни",
     "удали не позорь ся"
 ]
@@ -135,59 +131,89 @@ async def handle_chat(message: types.Message):
     if not globals().get("BOT_RUNNING_STATE", False):
         return
 
-    # ВСТАВЬ ЭТУ СТРОКУ ДЛЯ ПРОВЕРКИ:
-    logging.info(f"!!! БОТ УВИДЕЛ СООБЩЕНИЕ: {message.text} от {message.from_user.first_name if message.from_user else 'unknown'}")
+    # Защита от ботов
+    if message.from_user and message.from_user.is_bot:
+        return
 
     chat_id = message.chat.id
-    if message.chat.type not in ["group", "supergroup"] or (message.from_user and message.from_user.is_bot):
-        return
-    if not message.text:
+    user_name = message.from_user.first_name if message.from_user else "Кто-то"
+    
+    # Считываем тип контента
+    content_type = "text"
+    msg_log_text = message.text if message.text else ""
+
+    if message.photo:
+        content_type = "photo"
+        msg_log_text = "[Фотография]"
+    elif message.animation:
+        content_type = "gif"
+        msg_log_text = "[Гифка]"
+    elif message.sticker:
+        content_type = "sticker"
+        msg_log_text = f"[Стикер: {message.sticker.emoji or ''}]"
+    
+    # Если это не текст и не поддерживаемое медиа — выходим
+    if content_type == "text" and not message.text:
         return
 
+    # Отладочный лог в консоль Streamlit
+    logging.info(f"!!! БОТ УВИДЕЛ СООБЩЕНИЕ ({content_type}): '{msg_log_text}' от {user_name}")
+
+    # Сохраняем историю
     activity = globals()["CHATS_ACTIVITY"]
     if chat_id not in activity:
         activity[chat_id] = {"last_message_time": datetime.now(), "context": []}
     
     activity[chat_id]["last_message_time"] = datetime.now()
-    user = message.from_user.first_name if message.from_user else "Кто-то"
-    activity[chat_id]["context"].append(f"{user}: {message.text}")
+    activity[chat_id]["context"].append(f"{user_name}: {msg_log_text}")
     
     if len(activity[chat_id]["context"]) > 5:
         activity[chat_id]["context"].pop(0)
 
     bot_info = await bot.get_me()
     
-    # --- ПРОВЕРКА УСЛОВИЙ ДЛЯ ОТВЕТА БОТА ---
-    is_mentioned_via_dog = f"@{bot_info.username}".lower() in message.text.lower()
+    # Подготовка условий для ответа
+    text_lower = message.text.lower() if message.text else ""
+    is_mentioned_via_dog = f"@{bot_info.username}".lower() in text_lower
     is_reply_to_bot = message.reply_to_message and message.reply_to_message.from_user.id == bot_info.id
-    
-    # 100% ТРИГГЕР: Проверяем обычное упоминание имени в тексте (без @)
-    is_name_called = "тимур" in message.text.lower()
-    
-    # Обычный шанс ворваться в беседу рандомом (30%)
+    is_name_called = "тимур" in text_lower
     random_strike = random.random() < CHANCE_TO_REPLY
 
-    # Если сработало хоть одно условие (имя, реплай, тег или рандом) — отвечаем
+    # Бот реагирует, если его тегнули, ответили реплаем, написали имя или выпал рандом
     if is_mentioned_via_dog or is_reply_to_bot or is_name_called or random_strike:
         current_time = time.time()
         last_time = globals()["LAST_REPLY_TIME"].get(chat_id, 0)
         
-        # Антифлуд-пауза в 4 секунды на чат
+        # Твоя антифлуд-пауза (2 секунды)
         if current_time - last_time < 2:
             return  
 
         globals()["LAST_REPLY_TIME"][chat_id] = current_time
-        chat_history = "\n".join(activity[chat_id]["context"])
-        prompt = f"Контекст беседы:\n{chat_history}\n\nОтветь."
         
         try:
             await bot.send_chat_action(chat_id=chat_id, action="typing")
-            joke = get_ai_joke(prompt)
-            delay = max(1.5, min(4.0, len(joke) / 25))
-            await asyncio.sleep(delay)
+            
+            # Выбираем ответ в зависимости от медиафайла
+            if content_type == "photo":
+                reply_text = random.choice(PHOTO_REPLIES)
+                await asyncio.sleep(1.5)
+            elif content_type == "gif":
+                reply_text = random.choice(GIF_REPLIES)
+                await asyncio.sleep(1.5)
+            elif content_type == "sticker":
+                reply_text = random.choice(STICKER_REPLIES)
+                await asyncio.sleep(1.5)
+            else:
+                # Для обычного текста используем нейросеть
+                chat_history = "\n".join(activity[chat_id]["context"])
+                prompt = f"Контекст беседы:\n{chat_history}\n\nОтветь."
+                reply_text = get_ai_joke(prompt)
+                delay = max(1.5, min(4.0, len(reply_text) / 25))
+                await asyncio.sleep(delay)
             
             if globals().get("BOT_RUNNING_STATE", False):
-                await message.reply(joke)
+                await message.reply(reply_text)
+                logging.info(f"🟢 Отвечено: {reply_text}")
         except Exception as e:
             logging.error(f"Ошибка отправки сообщения: {e}")
 
