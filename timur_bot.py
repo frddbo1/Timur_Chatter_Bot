@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 # ================= КОНФИГУРАЦИЯ =================
 TELEGRAM_TOKEN = "8455818639:AAEvMCnXthyxT-UMMvzwd1WRKAa3BMqdkQ0"
 GROQ_API_KEY = "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"
-OPENROUTER_API_KEY = "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"
+OPENROUTER_API_KEY = "sk-or-v1-ТВОЙ_РАБОЧИЙ_КЛЮЧ_ОТ_OPENROUTER_СЮДА"
 
 PRIMARY_MODEL = "llama-3.3-70b-versatile"        
 FALLBACK_MODEL = "google/gemini-2.5-flash:free"  
@@ -30,9 +30,9 @@ SYSTEM_PROMPT = (
 CHANCE_TO_REPLY = 0.30  
 # ================================================
 
-st.title("🤖 Тимур Bot [V14 - Фикс Сессии]")
+st.title("🤖 Тимур Bot [V15 - Живая Кнопка]")
 
-# Инициализация глобальных переменных в памяти процесса (вне st.session_state)
+# Инициализируем глобальные словари в оперативной памяти (чтобы не падало при перезагрузке страницы)
 if "CHATS_ACTIVITY" not in globals():
     globals()["CHATS_ACTIVITY"] = {}
 if "LAST_REPLY_TIME" not in globals():
@@ -40,23 +40,17 @@ if "LAST_REPLY_TIME" not in globals():
 if "BOT_RUNNING_STATE" not in globals():
     globals()["BOT_RUNNING_STATE"] = False
 
-# Синхронизируем состояние с интерфейсом Streamlit
-if "bot_running" not in st.session_state:
-    st.session_state["bot_running"] = globals()["BOT_RUNNING_STATE"]
+# Проверяем, крутится ли уже наш живой поток в системе
+active_threads = [t.name for t in threading.enumerate()]
+is_thread_alive = "TimurThread" in active_threads
 
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("🚀 Запустить бота", disabled=st.session_state["bot_running"]):
-        st.session_state["bot_running"] = True
-        globals()["BOT_RUNNING_STATE"] = True
-        st.rerun()
-with col2:
-    if st.button("🛑 Экстренно остановить бота", disabled=not st.session_state["bot_running"]):
-        st.session_state["bot_running"] = False
-        globals()["BOT_RUNNING_STATE"] = False
-        st.rerun()
+# Синхронизируем статус
+if is_thread_alive:
+    globals()["BOT_RUNNING_STATE"] = True
+else:
+    globals()["BOT_RUNNING_STATE"] = False
 
-st.write(f"Текущий статус бота: {'**АКТИВЕН**' if globals()['BOT_RUNNING_STATE'] else '**ВЫКЛЮЧЕН**'}")
+st.write(f"Текущий статус процесса: {'🟢 **РАБОТАЕТ**' if globals()['BOT_RUNNING_STATE'] else '🔴 **ВЫКЛЮЧЕН**'}")
 
 LOCAL_REPLIES = [
     "че ты высрал вообще я нихуя не понял",
@@ -114,7 +108,6 @@ async def cmd_start(message: types.Message):
 
 @dp.message()
 async def handle_chat(message: types.Message):
-    # Проверяем статус из глобальной переменной, доступной потоку
     if not globals().get("BOT_RUNNING_STATE", False):
         return
 
@@ -124,7 +117,6 @@ async def handle_chat(message: types.Message):
     if not message.text:
         return
 
-    # Работаем со словарем в памяти процесса
     activity = globals()["CHATS_ACTIVITY"]
     if chat_id not in activity:
         activity[chat_id] = {"last_message_time": datetime.now(), "context": []}
@@ -166,25 +158,33 @@ async def handle_chat(message: types.Message):
 async def run_bot_polling():
     try:
         await bot.delete_webhook(drop_pending_updates=True)
-        logging.info("--> [Telegram API] Очередь обновлений успешно очищена.")
-        
-        # Запуск стандартного бесконечного поллинга aiogram
+        logging.info("--> [Telegram API] Очередь обновлений сброшена.")
         await dp.start_polling(bot, handle_signals=False)
-            
     except Exception as e:
         logging.error(f"Сбой поллинга: {e}")
+    finally:
+        globals()["BOT_RUNNING_STATE"] = False
 
 def thread_target():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(run_bot_polling())
 
-# Поднимаем поток один раз при старте приложения
-if globals()["BOT_RUNNING_STATE"]:
-    @st.cache_resource(show_spinner=False)
-    def start_bot_singleton():
-        t = threading.Thread(target=thread_target, daemon=True)
-        t.start()
-        logging.info("🚀 Фоновый процесс бота успешно инициализирован.")
-        return True
-    start_bot_singleton()
+# Кнопки управления
+col1, col2 = st.columns(2)
+
+with col1:
+    if st.button("🚀 Включить бота", disabled=globals()["BOT_RUNNING_STATE"]):
+        if not is_thread_alive:
+            globals()["BOT_RUNNING_STATE"] = True
+            t = threading.Thread(target=thread_target, name="TimurThread", daemon=True)
+            t.start()
+            st.success("Бот успешно запускается... Подожди пару секунд!")
+            time.sleep(2)
+            st.rerun()
+
+with col2:
+    if st.button("🛑 Выключить бота", disabled=not globals()["BOT_RUNNING_STATE"]):
+        globals()["BOT_RUNNING_STATE"] = False
+        st.warning("Бот остановлен (он перестанет отвечать на новые сообщения).")
+        st.rerun()
