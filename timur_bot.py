@@ -30,7 +30,7 @@ SYSTEM_PROMPT = (
 CHANCE_TO_REPLY = 0.30  
 # ================================================
 
-st.title("🤖 Тимур Bot [V21 - Фикс Хэндлеров]")
+st.title("🤖 Тимур Bot [V22 - Жесткая регистрация]")
 
 if "CHATS_ACTIVITY" not in st.session_state:
     st.session_state["CHATS_ACTIVITY"] = {}
@@ -93,6 +93,96 @@ class Signal:
     def set(self): 
         self._flag = True
 
+# --- ВЫНОСИМ ФУНКЦИИ ХЭНДЛЕРОВ ИЗ ПОТОКА ---
+async def cmd_start(message: types.Message):
+    await message.answer("ебать короче я роботаю")
+
+async def handle_chat(message: types.Message):
+    if message.from_user and message.from_user.is_bot:
+        return
+
+    chat_id = message.chat.id
+    user_name = message.from_user.first_name if message.from_user else "Кто-то"
+    
+    content_type = "text"
+    msg_log_text = message.text if message.text else ""
+    ai_media_context = ""
+
+    if message.photo:
+        content_type = "photo"
+        caption = message.caption if message.caption else "без подписи"
+        msg_log_text = f"[Фотография, подпись: {caption}]"
+        ai_media_context = f"*(скинул тебе фотку с подписью: {caption}. отреагируй на это жестко или иронично)*"
+    elif message.animation:
+        content_type = "gif"
+        caption = message.caption if message.caption else "без подписи"
+        msg_log_text = f"[Гифка, подпись: {caption}]"
+        ai_media_context = f"*(отправил гифку с подписью: {caption}. высмей его за использование гифок)*"
+    elif message.sticker:
+        content_type = "sticker"
+        emoji = message.sticker.emoji or "без эмодзи"
+        msg_log_text = f"[Стикер: {emoji}]"
+        ai_media_context = f"*(отправил тебе кринжовый стикер с эмодзи {emoji}. скажи ему чтоб перестал слать стикеры)*"
+    elif message.voice:
+        content_type = "voice"
+        msg_log_text = "[Голосовое сообщение]"
+        ai_media_context = "*(отправил тебе голосовуху. скажи что тебе лень слушать этот высер)*"
+    elif message.video_note:
+        content_type = "video_note"
+        msg_log_text = "[Кружочек]"
+        ai_media_context = "*(скинул кружочек в чат. подколоти его за лицо)*"
+
+    logging.info(f"!!! БОТ УВИДЕЛ СООБЩЕНИЕ ({content_type}): '{msg_log_text}' от {user_name}")
+
+    activity = st.session_state["CHATS_ACTIVITY"]
+    if chat_id not in activity:
+        activity[chat_id] = {"last_message_time": datetime.now(), "context": []}
+    
+    activity[chat_id]["last_message_time"] = datetime.now()
+    
+    log_to_context = msg_log_text if content_type == "text" else f"отправил {content_type}"
+    activity[chat_id]["context"].append(f"{user_name}: {log_to_context}")
+    
+    if len(activity[chat_id]["context"]) > 5:
+        activity[chat_id]["context"].pop(0)
+
+    # Динамически берем бота из контекста апдейта, чтобы не привязываться к глобальным переменным потоков
+    bot = message.bot
+    bot_info = await bot.get_me()
+    text_lower = msg_log_text.lower()
+    
+    is_mentioned_via_dog = f"@{bot_info.username}".lower() in text_lower
+    is_reply_to_bot = message.reply_to_message and message.reply_to_message.from_user.id == bot_info.id
+    is_name_called = "тимур" in text_lower
+    random_strike = random.random() < CHANCE_TO_REPLY
+
+    if is_mentioned_via_dog or is_reply_to_bot or is_name_called or random_strike:
+        current_time = time.time()
+        last_time = st.session_state["LAST_REPLY_TIME"].get(chat_id, 0)
+        
+        if current_time - last_time < 2:
+            return  
+
+        st.session_state["LAST_REPLY_TIME"][chat_id] = current_time
+        
+        try:
+            await bot.send_chat_action(chat_id=chat_id, action="typing")
+            
+            chat_history = "\n".join(activity[chat_id]["context"])
+            if content_type != "text":
+                prompt = f"Контекст беседы:\n{chat_history}\n\nВажное условие: {user_name} {ai_media_context}\nОтветь от лица Тимура:"
+            else:
+                prompt = f"Контекст беседы:\n{chat_history}\n\nОтветь."
+            
+            reply_text = get_ai_joke(prompt)
+            delay = max(1.5, min(4.0, len(reply_text) / 25))
+                
+            await asyncio.sleep(delay)
+            await message.reply(reply_text)
+            logging.info(f"🟢 Отвечено: {reply_text}")
+        except Exception as e:
+            logging.error(f"Ошибка отправки сообщения: {e}")
+
 
 def start_bot_thread(stop_signal):
     loop = asyncio.new_event_loop()
@@ -101,96 +191,9 @@ def start_bot_thread(stop_signal):
     bot = Bot(token=TELEGRAM_TOKEN)
     dp = Dispatcher()
 
-    @dp.message(Command("start"))
-    async def cmd_start(message: types.Message):
-        await message.answer("ебать короче я роботаю")
-
-    # Пустой декоратор без фильтров ловит ВСЕ типы сообщений (текст, фото, стикеры, медиа)
-    @dp.message()
-    async def handle_chat(message: types.Message):
-        if message.from_user and message.from_user.is_bot:
-            return
-
-        chat_id = message.chat.id
-        user_name = message.from_user.first_name if message.from_user else "Кто-то"
-        
-        content_type = "text"
-        msg_log_text = message.text if message.text else ""
-        ai_media_context = ""
-
-        # Проверка медиа-контента
-        if message.photo:
-            content_type = "photo"
-            caption = message.caption if message.caption else "без подписи"
-            msg_log_text = f"[Фотография, подпись: {caption}]"
-            ai_media_context = f"*(скинул тебе фотку с подписью: {caption}. отреагируй на это жестко или иронично)*"
-        elif message.animation:
-            content_type = "gif"
-            caption = message.caption if message.caption else "без подписи"
-            msg_log_text = f"[Гифка, подпись: {caption}]"
-            ai_media_context = f"*(отправил гифку с подписью: {caption}. высмей его за использование гифок)*"
-        elif message.sticker:
-            content_type = "sticker"
-            emoji = message.sticker.emoji or "без эмодзи"
-            msg_log_text = f"[Стикер: {emoji}]"
-            ai_media_context = f"*(отправил тебе кринжовый стикер с эмодзи {emoji}. скажи ему чтоб перестал слать стикеры)*"
-        elif message.voice:
-            content_type = "voice"
-            msg_log_text = "[Голосовое сообщение]"
-            ai_media_context = "*(отправил тебе голосовуху. скажи что тебе лень слушать этот высер)*"
-        elif message.video_note:
-            content_type = "video_note"
-            msg_log_text = "[Кружочек]"
-            ai_media_context = "*(скинул кружочек в чат. подколоти его за лицо)*"
-
-        logging.info(f"!!! БОТ УВИДЕЛ СООБЩЕНИЕ ({content_type}): '{msg_log_text}' от {user_name}")
-
-        activity = st.session_state["CHATS_ACTIVITY"]
-        if chat_id not in activity:
-            activity[chat_id] = {"last_message_time": datetime.now(), "context": []}
-        
-        activity[chat_id]["last_message_time"] = datetime.now()
-        
-        log_to_context = msg_log_text if content_type == "text" else f"отправил {content_type}"
-        activity[chat_id]["context"].append(f"{user_name}: {log_to_context}")
-        
-        if len(activity[chat_id]["context"]) > 5:
-            activity[chat_id]["context"].pop(0)
-
-        bot_info = await bot.get_me()
-        text_lower = msg_log_text.lower()
-        
-        is_mentioned_via_dog = f"@{bot_info.username}".lower() in text_lower
-        is_reply_to_bot = message.reply_to_message and message.reply_to_message.from_user.id == bot_info.id
-        is_name_called = "тимур" in text_lower
-        random_strike = random.random() < CHANCE_TO_REPLY
-
-        if is_mentioned_via_dog or is_reply_to_bot or is_name_called or random_strike:
-            current_time = time.time()
-            last_time = st.session_state["LAST_REPLY_TIME"].get(chat_id, 0)
-            
-            if current_time - last_time < 2:
-                return  
-
-            st.session_state["LAST_REPLY_TIME"][chat_id] = current_time
-            
-            try:
-                await bot.send_chat_action(chat_id=chat_id, action="typing")
-                
-                chat_history = "\n".join(activity[chat_id]["context"])
-                if content_type != "text":
-                    prompt = f"Контекст беседы:\n{chat_history}\n\nВажное условие: {user_name} {ai_media_context}\nОтветь от лица Тимура:"
-                else:
-                    prompt = f"Контекст беседы:\n{chat_history}\n\nОтветь."
-                
-                reply_text = get_ai_joke(prompt)
-                delay = max(1.5, min(4.0, len(reply_text) / 25))
-                    
-                await asyncio.sleep(delay)
-                await message.reply(reply_text)
-                logging.info(f"🟢 Отвечено: {reply_text}")
-            except Exception as e:
-                logging.error(f"Ошибка отправки сообщения: {e}")
+    # ЯВНАЯ РЕГИСТРАЦИЯ ХЭНДЛЕРОВ (без декораторов)
+    dp.message.register(cmd_start, Command("start"))
+    dp.message.register(handle_chat) # Ловит вообще ВСЕ, так как идет вторым без фильтров
 
     async def check_stop_signal():
         while not stop_signal.is_set():
@@ -204,7 +207,7 @@ def start_bot_thread(stop_signal):
             await bot.delete_webhook(drop_pending_updates=True)
             logging.info("--> [Telegram API] Очередь очищена.")
             
-            # Разрешаем все типы обновлений, чтобы бот видел не только текст
+            # Принудительно слушаем все типы апдейтов
             await asyncio.gather(
                 dp.start_polling(bot, handle_signals=False, allowed_updates=["message", "edited_message"]),
                 check_stop_signal()
