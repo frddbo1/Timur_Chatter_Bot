@@ -17,7 +17,7 @@ TELEGRAM_TOKEN = "8455818639:AAEvMCnXthyxT-UMMvzwd1WRKAa3BMqdkQ0"
 GROQ_API_KEY = "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"
 
 # СЮДА ВСТАВЬ СВОЙ КЛЮЧ ОТ OPENROUTER (создай бесплатно на openrouter.ai)
-OPENROUTER_API_KEY = "sk-or-v1-ТВОЙ_КЛЮЧ_ОТ_OPENROUTER_СЮДА"
+OPENROUTER_API_KEY = "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"
 
 PRIMARY_MODEL = "llama-3.1-70b-versatile" # Умная модель на Groq
 FALLBACK_MODEL = "meta-llama/llama-3.1-8b-instruct:free" # Бесплатная Llama 3.1 на OpenRouter
