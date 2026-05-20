@@ -222,7 +222,10 @@ async def run_bot_polling():
     try:
         await bot.delete_webhook(drop_pending_updates=True)
         logging.info("--> [Telegram API] Очередь очищена.")
-        await dp.start_polling(bot, handle_signals=False)
+        
+        # Фикс: Явно говорим Telegram отдавать нам ВСЕ типы сообщений (текст, фото, стикеры, гифки)
+        await dp.start_polling(bot, handle_signals=False, allowed_updates=["message"])
+        
     except Exception as e:
         logging.error(f"Сбой поллинга: {e}")
     finally:
