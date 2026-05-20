@@ -3,7 +3,7 @@ import random
 import time
 import logging
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime
 import streamlit as st
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
@@ -14,16 +14,10 @@ logging.basicConfig(level=logging.INFO)
 # ================= КОНФИГУРАЦИЯ =================
 TELEGRAM_TOKEN = "8455818639:AAEvMCnXthyxT-UMMvzwd1WRKAa3BMqdkQ0"
 GROQ_API_KEY = "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"
-
-# ⚠️ ВНИМАНИЕ: Если здесь будет неверный ключ, OpenRouter выдаст ошибку 401!
-# Если бесплатная модель Gemini не требует токена, можно попробовать оставить, 
-# но лучше вставить реальный рабочий ключ.
 OPENROUTER_API_KEY = "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"
 
-PRIMARY_MODEL = "llama-3.3-70b-versatile"        # АКТУАЛЬНАЯ РАБОЧАЯ МОДЕЛЬ GROQ
-FALLBACK_MODEL = "google/gemini-2.5-flash:free"  # СВЕЖИЙ БЕСПЛАТНЫЙ РЕЗЕРВ
-
-CURRENT_VERSION = "v11_fix_2026_models"
+PRIMARY_MODEL = "llama-3.3-70b-versatile"        
+FALLBACK_MODEL = "google/gemini-2.5-flash:free"  
 
 SYSTEM_PROMPT = (
     "Ты — 14-летний подросток по имени Тимур. Ты сидишь в локальном групповом чате с друзьями в Telegram. "
@@ -36,20 +30,14 @@ SYSTEM_PROMPT = (
 CHANCE_TO_REPLY = 0.30  
 # ================================================
 
-if "CHATS_ACTIVITY" not in globals():
-    CHATS_ACTIVITY = {}
-if "LAST_REPLY_TIME" not in globals():
-    LAST_REPLY_TIME = {}
+st.title("🤖 Управление Тимуром [V12 - Анти-Конфликт]")
+st.info("Архитектура изменена: используется st.cache_resource для предотвращения дублирования процессов.")
 
-# Жестко перезаписываем глобальную версию
-globals()["GLOBAL_VERSION"] = CURRENT_VERSION
-
-st.title("🤖 Управление Тимуром [V11]")
-st.write(f"Активная версия скрипта: **{CURRENT_VERSION}**")
-st.info("Переключено на модели: llama-3.3-70b-versatile и Gemini 2.5 Flash")
-
-bot = Bot(token=TELEGRAM_TOKEN)
-dp = Dispatcher()
+# Инициализируем структуры данных, если их нет
+if "CHATS_ACTIVITY" not in st.session_state:
+    st.session_state["CHATS_ACTIVITY"] = {}
+if "LAST_REPLY_TIME" not in st.session_state:
+    st.session_state["LAST_REPLY_TIME"] = {}
 
 LOCAL_REPLIES = [
     "че ты высрал вообще я нихуя не понял",
@@ -79,10 +67,8 @@ def get_ai_joke(prompt: str) -> str:
         if "choices" in result:
             logging.info("--> [Groq УСПЕХ]")
             return result["choices"][0]["message"]["content"].strip()
-        else:
-            logging.warning(f"--> [Groq ОТКАЗ] Код: {response.status_code}, Ответ: {result}")
     except Exception as e:
-        logging.error(f"--> [Groq Ошибка сети]: {e}")
+        logging.error(f"--> [Groq Ошибка]: {e}")
 
     # 2. РЕЗЕРВ К OPENROUTER
     url_or = "https://openrouter.ai/api/v1/chat/completions"
@@ -99,12 +85,14 @@ def get_ai_joke(prompt: str) -> str:
         if "choices" in result:
             logging.info("--> [OpenRouter УСПЕХ]")
             return result["choices"][0]["message"]["content"].strip()
-        else:
-            logging.warning(f"--> [OpenRouter ОТКАЗ] Код: {response.status_code}, Ответ: {result}")
     except Exception as e:
-        logging.error(f"--> [OpenRouter Ошибка сети]: {e}")
+        logging.error(f"--> [OpenRouter Ошибка]: {e}")
 
     return random.choice(LOCAL_REPLIES)
+
+# Создаем глобальный диспетчер
+bot = Bot(token=TELEGRAM_TOKEN)
+dp = Dispatcher()
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -112,76 +100,68 @@ async def cmd_start(message: types.Message):
 
 @dp.message()
 async def handle_chat(message: types.Message):
-    global CHATS_ACTIVITY, LAST_REPLY_TIME
-    
-    # СТОП-КРАН для защиты от старых запущенных потоков
-    if globals().get("GLOBAL_VERSION") != CURRENT_VERSION:
-        return
-
     chat_id = message.chat.id
     if message.chat.type not in ["group", "supergroup"] or (message.from_user and message.from_user.is_bot):
         return
     if not message.text:
         return
 
-    if chat_id not in CHATS_ACTIVITY:
-        CHATS_ACTIVITY[chat_id] = {"last_message_time": datetime.now(), "context": []}
+    activity = st.session_state["CHATS_ACTIVITY"]
+    if chat_id not in activity:
+        activity[chat_id] = {"last_message_time": datetime.now(), "context": []}
     
-    CHATS_ACTIVITY[chat_id]["last_message_time"] = datetime.now()
+    activity[chat_id]["last_message_time"] = datetime.now()
     user = message.from_user.first_name if message.from_user else "Кто-то"
-    CHATS_ACTIVITY[chat_id]["context"].append(f"{user}: {message.text}")
+    activity[chat_id]["context"].append(f"{user}: {message.text}")
     
-    if len(CHATS_ACTIVITY[chat_id]["context"]) > 5:
-        CHATS_ACTIVITY[chat_id]["context"].pop(0)
+    if len(activity[chat_id]["context"]) > 5:
+        activity[chat_id]["context"].pop(0)
 
     bot_info = await bot.get_me()
-    bot_username = f"@{bot_info.username}"
-    
-    is_mentioned = bot_username.lower() in message.text.lower()
+    is_mentioned = f"@{bot_info.username}".lower() in message.text.lower()
     is_reply_to_bot = message.reply_to_message and message.reply_to_message.from_user.id == bot_info.id
     random_strike = random.random() < CHANCE_TO_REPLY
 
     if is_mentioned or is_reply_to_bot or random_strike:
         current_time = time.time()
-        last_time = LAST_REPLY_TIME.get(chat_id, 0)
+        last_time = st.session_state["LAST_REPLY_TIME"].get(chat_id, 0)
         
         if current_time - last_time < 4.0:
             return  
 
-        LAST_REPLY_TIME[chat_id] = current_time
-        chat_history = "\n".join(CHATS_ACTIVITY[chat_id]["context"])
+        st.session_state["LAST_REPLY_TIME"][chat_id] = current_time
+        chat_history = "\n".join(activity[chat_id]["context"])
         prompt = f"Контекст беседы:\n{chat_history}\n\nОтветь."
         
-        await bot.send_chat_action(chat_id=chat_id, action="typing")
-        joke = get_ai_joke(prompt)
-        
-        delay = max(1.5, min(4.0, len(joke) / 25))
-        await asyncio.sleep(delay)
-        
-        if globals().get("GLOBAL_VERSION") == CURRENT_VERSION:
-            try:
-                await message.reply(joke)
-            except Exception as e:
-                logging.error(f"Ошибка отправки: {e}")
+        try:
+            await bot.send_chat_action(chat_id=chat_id, action="typing")
+            joke = get_ai_joke(prompt)
+            delay = max(1.5, min(4.0, len(joke) / 25))
+            await asyncio.sleep(delay)
+            await message.reply(joke)
+        except Exception as e:
+            logging.error(f"Ошибка при обработке/отправке: {e}")
 
-async def run_bot():
-    # Перед стартом принудительно сбрасываем старые зависшие сессии Telegram
+async def run_bot_polling():
     try:
         await bot.delete_webhook(drop_pending_updates=True)
-        logging.info("--> [Telegram] Вебхуки очищены, старые обновления сброшены.")
+        logging.info("--> [Telegram API] Успешно сбросили старый пулл обновлений.")
+        await dp.start_polling(bot, handle_signals=False)
     except Exception as e:
-        logging.error(f"Не удалось сбросить вебхук: {e}")
-        
-    await dp.start_polling(bot, handle_signals=False)
+        logging.error(f"Критическая ошибка в поллинге: {e}")
 
-def start_bot_thread():
+def thread_target():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.run_until_complete(run_bot())
+    loop.run_until_complete(run_bot_polling())
 
-# Запуск строго одной фоновой нити на эту версию в Streamlit
-if f"bot_thread_{CURRENT_VERSION}" not in st.session_state:
-    st.session_state[f"bot_thread_{CURRENT_VERSION}"] = True
-    t = threading.Thread(target=start_bot_thread, daemon=True)
+# КЭШИРУЕМ ПОТОК. Streamlit выполнит эту функцию ровно один раз за всё время жизни сервера!
+@st.cache_resource(show_spinner=False)
+def start_bot_singleton():
+    t = threading.Thread(target=thread_target, daemon=True)
     t.start()
-    logging.info(f"--> [Запуск] Поток {CURRENT_VERSION} запущен.")
+    logging.info("🚀 [МЕГА-ЗАПУСК] Единственный фоновый поток бота успешно создан!")
+    return True
+
+# Вызываем кэшированную функцию запуска
+start_bot_singleton()
