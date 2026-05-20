@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 # ================= КОНФИГУРАЦИЯ =================
 TELEGRAM_TOKEN = "8455818639:AAEvMCnXthyxT-UMMvzwd1WRKAa3BMqdkQ0"
 GROQ_API_KEY = "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"
-OPENROUTER_API_KEY = "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"
+OPENROUTER_API_KEY = "sk-or-v1-ТВОЙ_РАБОЧИЙ_КЛЮЧ_ОТ_OPENROUTER_СЮДА"
 
 PRIMARY_MODEL = "llama-3.3-70b-versatile"        
 FALLBACK_MODEL = "google/gemini-2.5-flash:free"  
@@ -30,9 +30,9 @@ SYSTEM_PROMPT = (
 CHANCE_TO_REPLY = 0.30  
 # ================================================
 
-st.title("🤖 Тимур Bot [V15 - Живая Кнопка]")
+st.title("🤖 Тимур Bot [V16 - Стопроцентный Триггер]")
 
-# Инициализируем глобальные словари в оперативной памяти (чтобы не падало при перезагрузке страницы)
+# Инициализируем глобальные словари в оперативной памяти процесса
 if "CHATS_ACTIVITY" not in globals():
     globals()["CHATS_ACTIVITY"] = {}
 if "LAST_REPLY_TIME" not in globals():
@@ -40,11 +40,11 @@ if "LAST_REPLY_TIME" not in globals():
 if "BOT_RUNNING_STATE" not in globals():
     globals()["BOT_RUNNING_STATE"] = False
 
-# Проверяем, крутится ли уже наш живой поток в системе
+# Проверяем, крутится ли уже активный поток бота в ОС
 active_threads = [t.name for t in threading.enumerate()]
 is_thread_alive = "TimurThread" in active_threads
 
-# Синхронизируем статус
+# Синхронизируем внутренний статус
 if is_thread_alive:
     globals()["BOT_RUNNING_STATE"] = True
 else:
@@ -86,7 +86,7 @@ def get_ai_joke(prompt: str) -> str:
     payload_or = {
         "model": FALLBACK_MODEL,
         "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
-        "temperature": 2, "max_tokens": 100
+        "temperature": 1.2, "max_tokens": 100
     }
     try:
         logging.info(f"--> [OpenRouter] Пробую резерв {FALLBACK_MODEL}...")
@@ -108,6 +108,7 @@ async def cmd_start(message: types.Message):
 
 @dp.message()
 async def handle_chat(message: types.Message):
+    # Если глобально бот выключен — игнорируем апдейты
     if not globals().get("BOT_RUNNING_STATE", False):
         return
 
@@ -129,15 +130,24 @@ async def handle_chat(message: types.Message):
         activity[chat_id]["context"].pop(0)
 
     bot_info = await bot.get_me()
-    is_mentioned = f"@{bot_info.username}".lower() in message.text.lower()
+    
+    # --- ПРОВЕРКА УСЛОВИЙ ДЛЯ ОТВЕТА БОТА ---
+    is_mentioned_via_dog = f"@{bot_info.username}".lower() in message.text.lower()
     is_reply_to_bot = message.reply_to_message and message.reply_to_message.from_user.id == bot_info.id
+    
+    # 100% ТРИГГЕР: Проверяем обычное упоминание имени в тексте (без @)
+    is_name_called = "тимур" in message.text.lower()
+    
+    # Обычный шанс ворваться в беседу рандомом (30%)
     random_strike = random.random() < CHANCE_TO_REPLY
 
-    if is_mentioned or is_reply_to_bot or random_strike:
+    # Если сработало хоть одно условие (имя, реплай, тег или рандом) — отвечаем
+    if is_mentioned_via_dog or is_reply_to_bot or is_name_called or random_strike:
         current_time = time.time()
         last_time = globals()["LAST_REPLY_TIME"].get(chat_id, 0)
         
-        if current_time - last_time < 4.0:
+        # Антифлуд-пауза в 4 секунды на чат
+        if current_time - last_time < 2:
             return  
 
         globals()["LAST_REPLY_TIME"][chat_id] = current_time
@@ -153,12 +163,12 @@ async def handle_chat(message: types.Message):
             if globals().get("BOT_RUNNING_STATE", False):
                 await message.reply(joke)
         except Exception as e:
-            logging.error(f"Ошибка отправки: {e}")
+            logging.error(f"Ошибка отправки сообщения: {e}")
 
 async def run_bot_polling():
     try:
         await bot.delete_webhook(drop_pending_updates=True)
-        logging.info("--> [Telegram API] Очередь обновлений сброшена.")
+        logging.info("--> [Telegram API] Очередь очищена.")
         await dp.start_polling(bot, handle_signals=False)
     except Exception as e:
         logging.error(f"Сбой поллинга: {e}")
@@ -170,7 +180,7 @@ def thread_target():
     asyncio.set_event_loop(loop)
     loop.run_until_complete(run_bot_polling())
 
-# Кнопки управления
+# --- ИНТЕРФЕЙС УПРАВЛЕНИЯ STREAMLIT ---
 col1, col2 = st.columns(2)
 
 with col1:
@@ -186,5 +196,5 @@ with col1:
 with col2:
     if st.button("🛑 Выключить бота", disabled=not globals()["BOT_RUNNING_STATE"]):
         globals()["BOT_RUNNING_STATE"] = False
-        st.warning("Бот остановлен (он перестанет отвечать на новые сообщения).")
+        st.warning("Бот остановлен (он больше не обрабатывает сообщения).")
         st.rerun()
