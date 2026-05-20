@@ -9,38 +9,38 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 import requests
 
-# Включаем детальные логи в консоль Streamlit, чтобы видеть каждое действие
+# Включаем детальные логи в консоль Streamlit
 logging.basicConfig(level=logging.INFO)
 
 # ================= КОНФИГУРАЦИЯ =================
 TELEGRAM_TOKEN = "8455818639:AAEvMCnXthyxT-UMMvzwd1WRKAa3BMqdkQ0"
 GROQ_API_KEY = "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"
 
-# Использовать оригинальное техническое имя модели Llama 3.1 8B Instruct на Groq
-LLAMA_MODEL = "llama-3.1-8b-instant"
+# ПЕРЕКЛЮЧИЛИ НА СТАРШУЮ МОДЕЛЬ 70B INSTRUCT
+LLAMA_MODEL = "llama-3.1-70b-versatile"
 
 SYSTEM_PROMPT = (
-    "Ты — участник локального чата в Telegram группе. Твоя цель - нести максимальный не связанный бред и смешить людей "
-    "иметь свой характер, влиться в общество, твое имя - Тимур, ты парень 14 летний в интернете "
-    "пиши коротко, как обычный человек в мессенджере "
-    "не пиши никогда не в коем случае запятые и точки, знаки восклицания и знаки вопроса "
-    "Не будь вежливым помощником. Если тебя троллят — тролль в ответ еще жестче, с матами, очень toxic"
+    "Ты — 14-летний парень по имени Тимур, сидишь в локальном групповом чате в Telegram. "
+    "Твоя цель — общаться как реальный подросток в интернете: иронично, дерзко, местами токсично, но смешно. "
+    "Не неси однообразный несвязный бред. Реагируй именно на то, что пишут люди, подкалывай их по контексту. "
+    "Если тебя троллят или оскорбляют — жестко и токсично отвечай взаимностью, используй маты и интернет-сленг. "
+    "ПРАВИЛА ОФОРМЛЕНИЯ: пиши исключительно маленькими буквами, коротко (до 20 слов), "
+    "никогда не ставь точки в конце сообщений, запятые, знаки восклицания или вопроса. "
+    "Никакого вежливого тона нейросети, ты обычный чел из чата."
 )
 
 CHANCE_TO_REPLY = 0.30  # Шанс авто-ответа 30%
 SILENCE_TIMEOUT = 3000
 # ================================================
 
-# ГЛОБАЛЬНЫЕ СЛОВАРИ (Хранятся в памяти процесса, защищены от перезагрузок интерфейса)
 if "CHATS_ACTIVITY" not in globals():
     CHATS_ACTIVITY = {}
 if "LAST_REPLY_TIME" not in globals():
     LAST_REPLY_TIME = {}
 
-st.title("🤖 Панель управления Тимуром")
+st.title("🤖 Панель управления Тимуром [70B Умный режим]")
 st.subheader("Статус: Активен (Фоновый поток Python 3.14)")
-st.write(f"Модель ИИ: **Meta Llama 3.1 8B Instruct** (via Groq)")
-st.write("Если бот замолчал, тегни его: `@Timur_Chatter_bot`")
+st.write(f"Модель ИИ: **Meta Llama 3.1 70B Instruct** (via Groq)")
 
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
@@ -57,11 +57,11 @@ def get_ai_joke(prompt: str) -> str:
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt}
         ],
-        "temperature": 1.5,
+        "temperature": 1.2,  # Снизил с 1.5 до 1.2, чтобы шутки были более логичными и точечными, без каши
         "max_tokens": 150
     }
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=10)
+        response = requests.post(url, headers=headers, json=payload, timeout=12)
         result = response.json()
         if "choices" in result:
             return result["choices"][0]["message"]["content"].strip()
@@ -80,20 +80,18 @@ async def cmd_reset(message: types.Message):
     chat_id = message.chat.id
     if chat_id in CHATS_ACTIVITY:
         CHATS_ACTIVITY[chat_id]["context"] = []
-    await message.reply("ебать вы мне стерли память нахуй пидарасы аыааааа я умираю ааа , . . . .     привет) ")
+    await message.reply("память чиста")
 
 @dp.message()
 async def handle_chat(message: types.Message):
     global CHATS_ACTIVITY, LAST_REPLY_TIME
     chat_id = message.chat.id
     
-    # Защита от лички и других ботов
     if message.chat.type not in ["group", "supergroup"] or (message.from_user and message.from_user.is_bot):
         return
     if not message.text:
         return
 
-    # Запись контекста в глобальный словарь
     if chat_id not in CHATS_ACTIVITY:
         CHATS_ACTIVITY[chat_id] = {"last_message_time": datetime.now(), "context": []}
     
@@ -115,16 +113,14 @@ async def handle_chat(message: types.Message):
         current_time = time.time()
         last_time = LAST_REPLY_TIME.get(chat_id, 0)
         
-        # Кулдаун 4 секунды, чтобы Groq не банил за флуд
         if current_time - last_time < 4.0:
-            logging.info(f"--> Тимур пропустил ход из-за кулдауна в чате {chat_id}")
             return  
 
         LAST_REPLY_TIME[chat_id] = current_time
         chat_history = "\n".join(CHATS_ACTIVITY[chat_id]["context"])
         prompt = f"Контекст беседы:\n{chat_history}\n\nОтветь на последнее сообщение."
         
-        logging.info(f"--> Тимур генерирует ответ для чата {chat_id}")
+        logging.info(f"--> Тимур 70B генерирует ответ для чата {chat_id}")
         await bot.send_chat_action(chat_id=chat_id, action="typing")
         joke = get_ai_joke(prompt)
         
@@ -158,9 +154,8 @@ def start_bot_thread():
     loop.create_task(silence_checker())
     loop.run_until_complete(dp.start_polling(bot, handle_signals=False))
 
-# Гарантированный запуск только одного независимого потока демона
 if "bot_thread" not in st.session_state:
     st.session_state.bot_thread = True
     t = threading.Thread(target=start_bot_thread, daemon=True)
     t.start()
-    logging.info("Фоновый поток Llama 3.1 бота успешно запущен.")
+    logging.info("Фоновый поток Llama 3.1 70B бота успешно запущен.")
