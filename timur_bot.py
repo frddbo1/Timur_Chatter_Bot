@@ -4,7 +4,7 @@ import time
 import os
 import sys
 
-st.title("🤖 Тимур Bot [V23 - Отладка Логов]")
+st.title("🤖 Тимур Bot [V24 - Исправление Синтаксиса]")
 
 PID_FILE = os.path.join(os.path.dirname(__file__), "bot.pid")
 LOG_FILE = os.path.join(os.path.dirname(__file__), "bot_output.log")
@@ -68,8 +68,6 @@ with col2:
         st.warning("Процесс остановлен.")
         time.sleep(1.5)
         st.rerun()
-
----
 
 # --- ОКНО ЛОГОВ ДЛЯ ТЕБЯ ---
 st.subheader("📋 Логи работы бота (Что происходит внутри):")
