@@ -22,6 +22,9 @@ OPENROUTER_API_KEY = "sk-or-v1-ТВОЙ_КЛЮЧ_ОТ_OPENROUTER_СЮДА"
 PRIMARY_MODEL = "llama-3.1-70b-versatile" # Умная модель на Groq
 FALLBACK_MODEL = "meta-llama/llama-3.1-8b-instruct:free" # Бесплатная Llama 3.1 на OpenRouter
 
+# УНИКАЛЬНЫЙ ТОКЕН ВЕРСИИ (чтобы старый бот понимал, что он устарел)
+CURRENT_VERSION = "v5_final_stealth"
+
 SYSTEM_PROMPT = (
     "Ты — 14-летний парень по имени Тимур, сидишь в lokalnom групповом чате в Telegram. "
     "Твоя цель — общаться как реальный подросток в интернете: иронично, дерзко, местами toxic, но смешно. "
@@ -36,25 +39,23 @@ CHANCE_TO_REPLY = 0.30  # Шанс авто-ответа 30%
 SILENCE_TIMEOUT = 3000
 # ================================================
 
-# ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ (Хранятся на уровне процесса)
+# ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
 if "CHATS_ACTIVITY" not in globals():
     CHATS_ACTIVITY = {}
 if "LAST_REPLY_TIME" not in globals():
     LAST_REPLY_TIME = {}
-if "STOP_EVENT" not in globals():
-    # Событие для безопасной остановки старых потоков
-    STOP_EVENT = threading.Event()
+if "GLOBAL_VERSION" not in globals():
+    globals()["GLOBAL_VERSION"] = CURRENT_VERSION
 
 # Отрисовка веб-панели управления Streamlit
-st.title("🤖 Панель управления Тимуром [Anti-Double V4]")
+st.title("🤖 Панель управления Тимуром [V5 Killer]")
 st.subheader("Статус: Активен (Фоновый поток Python 3.14)")
-st.write(f"Основной движок: **Groq (Llama 70B)**")
-st.write(f"Резервный движок: **OpenRouter (Llama 8B Free)**")
+st.write(f"Текущая активная версия в системе: **{globals()['GLOBAL_VERSION']}**")
 
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 
-# УЛЬТИМАТИВНЫЙ СПИСОК ЖИВЫХ ФРАЗ
+# УЛЬТИМАТИВНЫЙ СПИСОК ЖИВЫХ ФРАЗ (Никакого упоминания ошибок серверов или тупости!)
 LOCAL_REPLIES = [
     "че ты высрал вообще я нихуя не понял",
     "ебать ты умный конечно завали ебало пж",
@@ -145,8 +146,12 @@ async def cmd_reset(message: types.Message):
 @dp.message()
 async def handle_chat(message: types.Message):
     global CHATS_ACTIVITY, LAST_REPLY_TIME
-    chat_id = message.chat.id
     
+    # ЖЕСТКИЙ СТОП-КРАН: Если этот поток старой версии, он молча игнорирует сообщения
+    if globals().get("GLOBAL_VERSION") != CURRENT_VERSION:
+        return
+
+    chat_id = message.chat.id
     if message.chat.type not in ["group", "supergroup"] or (message.from_user and message.from_user.is_bot):
         return
     if not message.text:
@@ -156,7 +161,6 @@ async def handle_chat(message: types.Message):
         CHATS_ACTIVITY[chat_id] = {"last_message_time": datetime.now(), "context": []}
     
     CHATS_ACTIVITY[chat_id]["last_message_time"] = datetime.now()
-    
     user = message.from_user.first_name if message.from_user else "Кто-то"
     CHATS_ACTIVITY[chat_id]["context"].append(f"{user}: {message.text}")
     
@@ -193,7 +197,7 @@ async def handle_chat(message: types.Message):
             logging.error(f"Ошибка отправки: {e}")
 
 async def silence_checker():
-    while not STOP_EVENT.is_set():
+    while globals().get("GLOBAL_VERSION") == CURRENT_VERSION:
         await asyncio.sleep(60)
         now = datetime.now()
         for chat_id, data in list(CHATS_ACTIVITY.items()):
@@ -211,28 +215,13 @@ def start_bot_thread():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.create_task(silence_checker())
-    
-    # Функция контроля остановки пуллинга
-    async def polling_wrapper():
-        polling_task = asyncio.create_task(dp.start_polling(bot, handle_signals=False))
-        while not STOP_EVENT.is_set():
-            await asyncio.sleep(1)
-        logging.info("--> [СТОП] Сигнал получен. Выключаю старый пуллинг...")
-        polling_task.cancel()
-        await bot.session.close()
+    loop.run_until_complete(dp.start_polling(bot, handle_signals=False))
 
-    loop.run_until_complete(polling_wrapper())
+# Обновляем глобальную метку версии для деактивации старых тредов
+globals()["GLOBAL_VERSION"] = CURRENT_VERSION
 
-# УБИВАЕМ СТАРЫЙ ПОТОК ПЕРЕД ЗАПУСКОМ НОВОГО
-if "active_session" in st.session_state:
-    logging.info("--> [Перезапуск] Сигнализируем старому боту закрыться...")
-    STOP_EVENT.set() # Говорим старому потоку завершить работу
-    time.sleep(2)    # Даем ему время закрыть сессию Telegram
-    STOP_EVENT.clear() # Сбрасываем флаг для нового бота
-    del st.session_state["active_session"]
-
-if "active_session" not in st.session_state:
-    st.session_state.active_session = True
+if "bot_thread_v5" not in st.session_state:
+    st.session_state.bot_thread_v5 = True
     t = threading.Thread(target=start_bot_thread, daemon=True)
     t.start()
-    logging.info("--> [Запуск] Новый изолированный поток успешно поднят.")
+    logging.info(f"--> [Запуск] Поток версии {CURRENT_VERSION} успешно поднят.")
