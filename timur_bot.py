@@ -39,12 +39,12 @@ if "LAST_REPLY_TIME" not in globals():
 if "BOT_RUNNING_STATE" not in globals():
     globals()["BOT_RUNNING_STATE"] = False
 
+# Проверяем реальное наличие живого потока
 active_threads = [t.name for t in threading.enumerate()]
 is_thread_alive = "TimurThread" in active_threads
 
-if is_thread_alive:
-    globals()["BOT_RUNNING_STATE"] = True
-else:
+# Синхронизируем состояние
+if not is_thread_alive:
     globals()["BOT_RUNNING_STATE"] = False
 
 st.write(f"Текущий статус процесса: {'🟢 **РАБОТАЕТ**' if globals()['BOT_RUNNING_STATE'] else '🔴 **ВЫКЛЮЧЕН**'}")
@@ -119,61 +119,76 @@ def get_ai_joke(prompt: str) -> str:
 
     return random.choice(LOCAL_REPLIES)
 
-bot = Bot(token=TELEGRAM_TOKEN)
-dp = Dispatcher()
+# Создаем объекты глобально, чтобы к ним был доступ из разных мест
+if "bot_instance" not in globals():
+    globals()["bot_instance"] = Bot(token=TELEGRAM_TOKEN)
+if "dp_instance" not in globals():
+    globals()["dp_instance"] = Dispatcher()
+
+bot = globals()["bot_instance"]
+dp = globals()["dp_instance"]
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     await message.answer("ебать короче я роботаю")
 
-# ТЕПЕРЬ ТУТ СТОИТ F.any() — ЭТО ЗАСТАВИТ БОТА ВИДЕТЬ КАРТИНКИ, ГИФКИ И СТИКЕРЫ
 @dp.message(F.any())
 async def handle_chat(message: types.Message):
     if not globals().get("BOT_RUNNING_STATE", False):
         return
 
-    # Защита от ботов
     if message.from_user and message.from_user.is_bot:
         return
 
     chat_id = message.chat.id
     user_name = message.from_user.first_name if message.from_user else "Кто-то"
     
-    # Считываем тип контента
     content_type = "text"
     msg_log_text = message.text if message.text else ""
+    ai_media_context = ""
 
-    # Проверяем медиа и вытаскиваем подпись, если она есть
     if message.photo:
         content_type = "photo"
-        msg_log_text = message.caption if message.caption else "[Фотография]"
+        caption = message.caption if message.caption else "без подписи"
+        msg_log_text = f"[Фотография, подпись: {caption}]"
+        ai_media_context = f"*(скинул тебе фотку с подписью: {caption}. отреагируй на это жестко или иронично)*"
     elif message.animation:
         content_type = "gif"
-        msg_log_text = message.caption if message.caption else "[Гифка]"
+        caption = message.caption if message.caption else "без подписи"
+        msg_log_text = f"[Гифка, подпись: {caption}]"
+        ai_media_context = f"*(отправил гифку с подписью: {caption}. высмей его за использование гифок)*"
     elif message.sticker:
         content_type = "sticker"
-        msg_log_text = f"[Стикер: {message.sticker.emoji or ''}]"
-    
-    # Отладочный лог в консоль — теперь мы точно увидим, что зашло в хэндлер
+        emoji = message.sticker.emoji or "без эмодзи"
+        msg_log_text = f"[Стикер: {emoji}]"
+        ai_media_context = f"*(отправил тебе кринжовый стикер с эмодзи {emoji}. скажи ему чтоб перестал слать стикеры)*"
+    elif message.voice:
+        content_type = "voice"
+        msg_log_text = "[Голосовое сообщение]"
+        ai_media_context = "*(отправил тебе голосовуху. скажи что тебе лень слушать этот высер)*"
+    elif message.video_note:
+        content_type = "video_note"
+        msg_log_text = "[Кружочек]"
+        ai_media_context = "*(скинул кружочек в чат. подколоти его за лицо)*"
+
+    if content_type == "text" and not message.text:
+        return
+
     logging.info(f"!!! БОТ УВИДЕЛ СООБЩЕНИЕ ({content_type}): '{msg_log_text}' от {user_name}")
 
-    # Сохраняем историю
     activity = globals()["CHATS_ACTIVITY"]
     if chat_id not in activity:
         activity[chat_id] = {"last_message_time": datetime.now(), "context": []}
     
     activity[chat_id]["last_message_time"] = datetime.now()
     
-    # Чтобы ИИ понимал, что это медиа, пишем в контекст понятный текст
-    log_to_context = msg_log_text if not msg_log_text.startswith("[") else f"скинул {content_type}"
+    log_to_context = msg_log_text if content_type == "text" else f"отправил {content_type}"
     activity[chat_id]["context"].append(f"{user_name}: {log_to_context}")
     
     if len(activity[chat_id]["context"]) > 5:
         activity[chat_id]["context"].pop(0)
 
     bot_info = await bot.get_me()
-    
-    # Приводим к нижнему регистру текст ИЛИ подпись к фото/гифке
     text_lower = msg_log_text.lower()
     
     is_mentioned_via_dog = f"@{bot_info.username}".lower() in text_lower
@@ -181,15 +196,12 @@ async def handle_chat(message: types.Message):
     is_name_called = "тимур" in text_lower
     random_strike = random.random() < CHANCE_TO_REPLY
 
-    # Жёсткий лог условий для отладки, если бот промолчал
     logging.info(f"Проверка триггеров: тег={is_mentioned_via_dog}, реплай={is_reply_to_bot}, имя={is_name_called}, рандом={random_strike}")
 
-    # Бот реагирует, если его тегнули, ответили реплаем, написали имя или выпал рандом
     if is_mentioned_via_dog or is_reply_to_bot or is_name_called or random_strike:
         current_time = time.time()
         last_time = globals()["LAST_REPLY_TIME"].get(chat_id, 0)
         
-        # Антифлуд-пауза (2 секунды)
         if current_time - last_time < 2:
             logging.info("Отмена ответа: сработал антифлуд-таймер")
             return  
@@ -199,23 +211,19 @@ async def handle_chat(message: types.Message):
         try:
             await bot.send_chat_action(chat_id=chat_id, action="typing")
             
-            # Выбираем ответ в зависимости от медиафайла
-            if content_type == "photo":
-                reply_text = random.choice(PHOTO_REPLIES)
-                await asyncio.sleep(1.5)
-            elif content_type == "gif":
-                reply_text = random.choice(GIF_REPLIES)
-                await asyncio.sleep(1.5)
-            elif content_type == "sticker":
-                reply_text = random.choice(STICKER_REPLIES)
-                await asyncio.sleep(1.5)
+            # Для медиа мы скармливаем ИИ контекст и инструкцию, чтобы он генерировал УНИКАЛЬНЫЙ ответ
+            if content_type != "text":
+                chat_history = "\n".join(activity[chat_id]["context"])
+                prompt = f"Контекст беседы:\n{chat_history}\n\nВажное условие: {user_name} {ai_media_context}\nОтветь от лица Тимура:"
+                reply_text = get_ai_joke(prompt)
+                delay = 2.0
             else:
-                # Для обычного текста используем нейросеть
                 chat_history = "\n".join(activity[chat_id]["context"])
                 prompt = f"Контекст беседы:\n{chat_history}\n\nОтветь."
                 reply_text = get_ai_joke(prompt)
                 delay = max(1.5, min(4.0, len(reply_text) / 25))
-                await asyncio.sleep(delay)
+                
+            await asyncio.sleep(delay)
             
             if globals().get("BOT_RUNNING_STATE", False):
                 await message.reply(reply_text)
@@ -227,10 +235,7 @@ async def run_bot_polling():
     try:
         await bot.delete_webhook(drop_pending_updates=True)
         logging.info("--> [Telegram API] Очередь очищена.")
-        
-        # Фикс: Явно говорим Telegram отдавать нам ВСЕ типы сообщений (текст, фото, стикеры, гифки)
         await dp.start_polling(bot, handle_signals=False, allowed_updates=["message"])
-        
     except Exception as e:
         logging.error(f"Сбой поллинга: {e}")
     finally:
@@ -239,7 +244,12 @@ async def run_bot_polling():
 def thread_target():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.run_until_complete(run_bot_polling())
+    try:
+        loop.run_until_complete(run_bot_polling())
+    except asyncio.CancelledError:
+        pass
+    finally:
+        loop.close()
 
 # --- ИНТЕРФЕЙС УПРАВЛЕНИЯ STREAMLIT ---
 col1, col2 = st.columns(2)
@@ -248,14 +258,34 @@ with col1:
     if st.button("🚀 Включить бота", disabled=globals()["BOT_RUNNING_STATE"]):
         if not is_thread_alive:
             globals()["BOT_RUNNING_STATE"] = True
+            # Свежая инициализация сессии бота при каждом старте
+            globals()["bot_instance"] = Bot(token=TELEGRAM_TOKEN)
+            bot = globals()["bot_instance"]
+            
             t = threading.Thread(target=thread_target, name="TimurThread", daemon=True)
             t.start()
             st.success("Бот успешно запускается... Подожди пару секунд!")
-            time.sleep(2)
+            time.sleep(2.5)
             st.rerun()
 
 with col2:
     if st.button("🛑 Выключить бота", disabled=not globals()["BOT_RUNNING_STATE"]):
         globals()["BOT_RUNNING_STATE"] = False
-        st.warning("Бот остановлен (он больше не обрабатывает сообщения).")
+        
+        # ГЛАВНЫЙ ФИКС: Принудительно закрываем поллинг через остановку диспетчера и закрытие сессии бота
+        async def stop_all():
+            try:
+                await dp.stop_polling()
+                await bot.session.close()
+            except Exception as e:
+                logging.error(f"Ошибка при мягкой остановке бота: {e}")
+
+        # Запускаем быструю корутину закрытия прямо из Streamlit
+        try:
+            asyncio.run(stop_all())
+        except Exception:
+            pass
+            
+        st.warning("Поток бота принудительно остановлен.")
+        time.sleep(1.5)
         st.rerun()
