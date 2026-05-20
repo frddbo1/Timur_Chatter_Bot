@@ -16,17 +16,17 @@ logging.basicConfig(level=logging.INFO)
 TELEGRAM_TOKEN = "8455818639:AAEvMCnXthyxT-UMMvzwd1WRKAa3BMqdkQ0"
 GROQ_API_KEY = "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"
 
-# СЮДА ВСТАВЬ СВОЙ КЛЮЧ ОТ OPENROUTER
-OPENROUTER_API_KEY = "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"
+# ТВОЙ КЛЮЧ ОТ OPENROUTER (создай бесплатно на openrouter.ai)
+OPENROUTER_API_KEY = "sk-or-v1-ТВОЙ_КЛЮЧ_ОТ_OPENROUTER_СЮДА"
 
 PRIMARY_MODEL = "llama-3.1-70b-versatile" # Умная модель на Groq
 FALLBACK_MODEL = "meta-llama/llama-3.1-8b-instruct:free" # Бесплатная Llama 3.1 на OpenRouter
 
 SYSTEM_PROMPT = (
     "Ты — 14-летний парень по имени Тимур, сидишь в lokalnom групповом чате в Telegram. "
-    "Твоя цель — общаться как реальный подросток в интернете: иронично, дерзко, местами токсично, но смешно. "
+    "Твоя цель — общаться как реальный подросток в интернете: иронично, дерзко, местами toxic, но смешно. "
     "Не неси однообразный несвязный бред. Реагируй именно на то, что пишут люди, подкалывай их по контексту. "
-    "Если тебя троллят или оскорбляют — жестко и токсично отвечай взаимностью, используй маты и интернет-сленг. "
+    "Если тебя троллят или оскорбляют — жестко отвечай взаимностью, используй маты и интернет-сленг. "
     "ПРАВИЛА ОФОРМЛЕНИЯ: пиши исключительно маленькими буквами, коротко (до 20 слов), "
     "никогда не ставь точки в конце сообщений, запятые, знаки восклицания или вопроса. "
     "Никакого вежливого тона нейросети, ты обычный чел из чата."
@@ -36,14 +36,14 @@ CHANCE_TO_REPLY = 0.30  # Шанс авто-ответа 30%
 SILENCE_TIMEOUT = 3000
 # ================================================
 
-# ГЛОБАЛЬНЫЕ СЛОВАРИ (Защищены от перезагрузок интерфейса Streamlit)
+# ГЛОБАЛЬНЫЕ СЛОВАРИ (Защищены от перезагрузок интерфейса)
 if "CHATS_ACTIVITY" not in globals():
     CHATS_ACTIVITY = {}
 if "LAST_REPLY_TIME" not in globals():
     LAST_REPLY_TIME = {}
 
 # Отрисовка веб-панели управления Streamlit
-st.title("🤖 Панель управления Тимуром [Безотказный Гибрид V3]")
+st.title("🤖 Панель управления Тимуром [Ultra Stealth]")
 st.subheader("Статус: Активен (Фоновый поток Python 3.14)")
 st.write(f"Основной движок: **Groq (Llama 70B)**")
 st.write(f"Резервный движок: **OpenRouter (Llama 8B Free)**")
@@ -51,7 +51,7 @@ st.write(f"Резервный движок: **OpenRouter (Llama 8B Free)**")
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 
-# ЛОКАЛЬНАЯ БАЗА ПАЦАНСКИХ ФРАЗ (ЕСЛИ ВСЕ СЕРВЕРА УПАЛИ)
+# УЛЬТИМАТИВНЫЙ СПИСОК ЖИВЫХ ФРАЗ (Если нейросети лежат, бот симулирует общение)
 LOCAL_REPLIES = [
     "че ты высрал вообще я нихуя не понял",
     "ебать ты умный конечно завали ебало пж",
@@ -62,11 +62,16 @@ LOCAL_REPLIES = [
     "ебать ты выдал конечно",
     "че за хуйню я щас прочитал",
     "ладно забей",
-    "поясни за базар че ты несешь вообще"
+    "поясни за базар че ты несешь вообще",
+    "да иди ты нахуй со своими историями",
+    "ммм понятно",
+    "честно мне максимально похуй",
+    "а че ты мне это пишешь",
+    "че за кринж нахуй"
 ]
 
 def get_ai_joke(prompt: str) -> str:
-    """Запрос с обходом лимитов через два разных провайдера + локальный фолбек"""
+    """Запрос с обходом лимитов через два разных провайдера + маскировочный фолбек"""
     
     # 1. СТУЧИМСЯ В GROQ К УМНОЙ 70B
     url_groq = "https://api.groq.com/openai/v1/chat/completions"
@@ -93,7 +98,7 @@ def get_ai_joke(prompt: str) -> str:
             logging.info("--> [Groq Успех] Ответила 70B")
             return result["choices"][0]["message"]["content"].strip()
             
-        logging.warning("--> [Groq Ограничение/Лимит]. Иду в OpenRouter...")
+        logging.warning("--> [Groq Лимит]. Переключаюсь на OpenRouter...")
     except Exception as e:
         logging.error(f"--> [Groq Ошибка сети]: {e}. Переключаюсь на OpenRouter...")
 
@@ -126,8 +131,8 @@ def get_ai_joke(prompt: str) -> str:
     except Exception as e:
         logging.error(f"--> [OpenRouter Ошибка сети]: {e}")
 
-    # 3. УЛЬТИМАТИВНЫЙ ЛОКАЛЬНЫЙ ФОЛБЕК (Если всё легло)
-    logging.warning("--> [ФОЛБЕК] Все нейросети лежат. Выдаю фразу из локальной базы.")
+    # 3. ЕСЛИ ЛЕГЛО ВООБЩЕ ВСЕ — ИМИТИРУЕМ ПОФИГИЗМ
+    logging.warning("--> [ФОЛБЕК] Все нейросети лежат. Выдаю маскировочную фразу.")
     return random.choice(LOCAL_REPLIES)
 
 @dp.message(Command("start"))
@@ -213,8 +218,14 @@ def start_bot_thread():
     loop.create_task(silence_checker())
     loop.run_until_complete(dp.start_polling(bot, handle_signals=False))
 
+# Автоматический перезапуск потока при деплое нового кода
+if "current_code_version" not in st.session_state:
+    st.session_state.current_code_version = "v3_stealth"
+    if "bot_thread" in st.session_state:
+        del st.session_state["bot_thread"]
+
 if "bot_thread" not in st.session_state:
     st.session_state.bot_thread = True
     t = threading.Thread(target=start_bot_thread, daemon=True)
     t.start()
-    logging.info("Фоновый поток запущен.")
+    logging.info("Фоновый поток скрытого режима запущен.")
