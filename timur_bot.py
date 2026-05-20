@@ -20,7 +20,7 @@ PRIMARY_MODEL = "llama-3.3-70b-versatile"
 FALLBACK_MODEL = "google/gemini-2.5-flash:free"  
 
 SYSTEM_PROMPT = (
-    "Ты — 14-летний подросток по имени Тимур. Ты сидишь в локальном групповом чате с друзьями in Telegram. У тебя аутизм."
+    "Ты — 14-летний подросток по имени Тимур. Ты сидишь в локальном групповом чате с друзьями в Telegram. У тебя аутизм."
     "Общайся как реальный парень из интернета: иронично, очень коротко, немного дерзко и с юмором. "
     "Реагируй строго на контекст беседы, подкалывай участников чата. "
     "ПРАВИЛА СТИЛЯ: пиши только маленькими буквами, используй молодежный сленг, "
@@ -30,9 +30,8 @@ SYSTEM_PROMPT = (
 CHANCE_TO_REPLY = 0.30  
 # ================================================
 
-st.title("🤖 Тимур Bot [V20 - Исправленный]")
+st.title("🤖 Тимур Bot [V21 - Фикс Хэндлеров]")
 
-# Инициализация глобальных состояний в Streamlit
 if "CHATS_ACTIVITY" not in st.session_state:
     st.session_state["CHATS_ACTIVITY"] = {}
 if "LAST_REPLY_TIME" not in st.session_state:
@@ -40,7 +39,6 @@ if "LAST_REPLY_TIME" not in st.session_state:
 if "BOT_STOP_EVENT" not in st.session_state:
     st.session_state["BOT_STOP_EVENT"] = None
 
-# Проверяем реальный статус потока
 active_threads = [t.name for t in threading.enumerate()]
 is_thread_alive = "TimurThread" in active_threads
 
@@ -87,7 +85,6 @@ def get_ai_joke(prompt: str) -> str:
     return random.choice(LOCAL_REPLIES)
 
 
-# Простой класс-контейнер для флага остановки
 class Signal:
     def __init__(self): 
         self._flag = False
@@ -97,7 +94,6 @@ class Signal:
         self._flag = True
 
 
-# Функция, которая запускается внутри TimurThread
 def start_bot_thread(stop_signal):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -109,7 +105,8 @@ def start_bot_thread(stop_signal):
     async def cmd_start(message: types.Message):
         await message.answer("ебать короче я роботаю")
 
-    @dp.message(F.any())
+    # Пустой декоратор без фильтров ловит ВСЕ типы сообщений (текст, фото, стикеры, медиа)
+    @dp.message()
     async def handle_chat(message: types.Message):
         if message.from_user and message.from_user.is_bot:
             return
@@ -121,6 +118,7 @@ def start_bot_thread(stop_signal):
         msg_log_text = message.text if message.text else ""
         ai_media_context = ""
 
+        # Проверка медиа-контента
         if message.photo:
             content_type = "photo"
             caption = message.caption if message.caption else "без подписи"
@@ -144,9 +142,6 @@ def start_bot_thread(stop_signal):
             content_type = "video_note"
             msg_log_text = "[Кружочек]"
             ai_media_context = "*(скинул кружочек в чат. подколоти его за лицо)*"
-
-        if content_type == "text" and not message.text:
-            return
 
         logging.info(f"!!! БОТ УВИДЕЛ СООБЩЕНИЕ ({content_type}): '{msg_log_text}' от {user_name}")
 
@@ -185,12 +180,11 @@ def start_bot_thread(stop_signal):
                 chat_history = "\n".join(activity[chat_id]["context"])
                 if content_type != "text":
                     prompt = f"Контекст беседы:\n{chat_history}\n\nВажное условие: {user_name} {ai_media_context}\nОтветь от лица Тимура:"
-                    reply_text = get_ai_joke(prompt)
-                    delay = 2.0
                 else:
                     prompt = f"Контекст беседы:\n{chat_history}\n\nОтветь."
-                    reply_text = get_ai_joke(prompt)
-                    delay = max(1.5, min(4.0, len(reply_text) / 25))
+                
+                reply_text = get_ai_joke(prompt)
+                delay = max(1.5, min(4.0, len(reply_text) / 25))
                     
                 await asyncio.sleep(delay)
                 await message.reply(reply_text)
@@ -198,7 +192,6 @@ def start_bot_thread(stop_signal):
             except Exception as e:
                 logging.error(f"Ошибка отправки сообщения: {e}")
 
-    # Функция фонового мониторинга кнопки "Выключить"
     async def check_stop_signal():
         while not stop_signal.is_set():
             await asyncio.sleep(0.5)
@@ -211,8 +204,9 @@ def start_bot_thread(stop_signal):
             await bot.delete_webhook(drop_pending_updates=True)
             logging.info("--> [Telegram API] Очередь очищена.")
             
+            # Разрешаем все типы обновлений, чтобы бот видел не только текст
             await asyncio.gather(
-                dp.start_polling(bot, handle_signals=False, allowed_updates=["message"]),
+                dp.start_polling(bot, handle_signals=False, allowed_updates=["message", "edited_message"]),
                 check_stop_signal()
             )
         except Exception as e:
@@ -222,7 +216,7 @@ def start_bot_thread(stop_signal):
         loop.run_until_complete(main())
     finally:
         loop.close()
-        logging.info("--> Фоновый поток TimurThread полностью уничтожен и чист.")
+        logging.info("--> Фоновый поток TimurThread полностью уничтожен.")
 
 
 # --- ИНТЕРФЕЙС УПРАВЛЕНИЯ STREAMLIT ---
@@ -230,7 +224,6 @@ col1, col2 = st.columns(2)
 
 with col1:
     if st.button("🚀 Включить бота", disabled=is_thread_alive):
-        # Создаем наш безопасный объект сигнала без вызова внутренних штук asyncio
         sig = Signal()
         st.session_state["BOT_STOP_EVENT"] = sig
         
