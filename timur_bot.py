@@ -36,14 +36,17 @@ CHANCE_TO_REPLY = 0.30  # Шанс авто-ответа 30%
 SILENCE_TIMEOUT = 3000
 # ================================================
 
-# ГЛОБАЛЬНЫЕ СЛОВАРИ (Защищены от перезагрузок интерфейса)
+# ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ (Хранятся на уровне процесса)
 if "CHATS_ACTIVITY" not in globals():
     CHATS_ACTIVITY = {}
 if "LAST_REPLY_TIME" not in globals():
     LAST_REPLY_TIME = {}
+if "STOP_EVENT" not in globals():
+    # Событие для безопасной остановки старых потоков
+    STOP_EVENT = threading.Event()
 
 # Отрисовка веб-панели управления Streamlit
-st.title("🤖 Панель управления Тимуром [Ultra Stealth]")
+st.title("🤖 Панель управления Тимуром [Anti-Double V4]")
 st.subheader("Статус: Активен (Фоновый поток Python 3.14)")
 st.write(f"Основной движок: **Groq (Llama 70B)**")
 st.write(f"Резервный движок: **OpenRouter (Llama 8B Free)**")
@@ -51,7 +54,7 @@ st.write(f"Резервный движок: **OpenRouter (Llama 8B Free)**")
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 
-# УЛЬТИМАТИВНЫЙ СПИСОК ЖИВЫХ ФРАЗ (Если нейросети лежат, бот симулирует общение)
+# УЛЬТИМАТИВНЫЙ СПИСОК ЖИВЫХ ФРАЗ
 LOCAL_REPLIES = [
     "че ты высрал вообще я нихуя не понял",
     "ебать ты умный конечно завали ебало пж",
@@ -72,8 +75,6 @@ LOCAL_REPLIES = [
 
 def get_ai_joke(prompt: str) -> str:
     """Запрос с обходом лимитов через два разных провайдера + маскировочный фолбек"""
-    
-    # 1. СТУЧИМСЯ В GROQ К УМНОЙ 70B
     url_groq = "https://api.groq.com/openai/v1/chat/completions"
     headers_groq = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
@@ -93,16 +94,13 @@ def get_ai_joke(prompt: str) -> str:
         logging.info("--> [Groq] Запрос к умной модели 70B...")
         response = requests.post(url_groq, headers=headers_groq, json=payload_groq, timeout=8)
         result = response.json()
-        
         if "choices" in result:
             logging.info("--> [Groq Успех] Ответила 70B")
             return result["choices"][0]["message"]["content"].strip()
-            
-        logging.warning("--> [Groq Лимит]. Переключаюсь на OpenRouter...")
     except Exception as e:
-        logging.error(f"--> [Groq Ошибка сети]: {e}. Переключаюсь на OpenRouter...")
+        logging.error(f"--> [Groq Ошибка]: {e}")
 
-    # 2. ЕСЛИ GROQ СДОХ ИЛИ СРАБОТАЛ RATE LIMIT — МГНОВЕННО ИДЕМ В OPENROUTER
+    # 2. РЕЗЕРВНЫЙ ВАРИАНТ — OPENROUTER
     url_or = "https://openrouter.ai/api/v1/chat/completions"
     headers_or = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -122,16 +120,13 @@ def get_ai_joke(prompt: str) -> str:
         logging.info("--> [OpenRouter] Запрос к резервной бесплатной Llama 3.1 8B...")
         response = requests.post(url_or, headers=headers_or, json=payload_or, timeout=8)
         result = response.json()
-        
         if "choices" in result:
             logging.info("--> [OpenRouter Успех] Ответила резервная модель")
             return result["choices"][0]["message"]["content"].strip()
-        
-        logging.error(f"--> [OpenRouter Ошибка сервера]: {result}")
     except Exception as e:
-        logging.error(f"--> [OpenRouter Ошибка сети]: {e}")
+        logging.error(f"--> [OpenRouter Ошибка]: {e}")
 
-    # 3. ЕСЛИ ЛЕГЛО ВООБЩЕ ВСЕ — ИМИТИРУЕМ ПОФИГИЗМ
+    # 3. ФОЛБЕК
     logging.warning("--> [ФОЛБЕК] Все нейросети лежат. Выдаю маскировочную фразу.")
     return random.choice(LOCAL_REPLIES)
 
@@ -198,7 +193,7 @@ async def handle_chat(message: types.Message):
             logging.error(f"Ошибка отправки: {e}")
 
 async def silence_checker():
-    while True:
+    while not STOP_EVENT.is_set():
         await asyncio.sleep(60)
         now = datetime.now()
         for chat_id, data in list(CHATS_ACTIVITY.items()):
@@ -216,16 +211,28 @@ def start_bot_thread():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.create_task(silence_checker())
-    loop.run_until_complete(dp.start_polling(bot, handle_signals=False))
+    
+    # Функция контроля остановки пуллинга
+    async def polling_wrapper():
+        polling_task = asyncio.create_task(dp.start_polling(bot, handle_signals=False))
+        while not STOP_EVENT.is_set():
+            await asyncio.sleep(1)
+        logging.info("--> [СТОП] Сигнал получен. Выключаю старый пуллинг...")
+        polling_task.cancel()
+        await bot.session.close()
 
-# Автоматический перезапуск потока при деплое нового кода
-if "current_code_version" not in st.session_state:
-    st.session_state.current_code_version = "v3_stealth"
-    if "bot_thread" in st.session_state:
-        del st.session_state["bot_thread"]
+    loop.run_until_complete(polling_wrapper())
 
-if "bot_thread" not in st.session_state:
-    st.session_state.bot_thread = True
+# УБИВАЕМ СТАРЫЙ ПОТОК ПЕРЕД ЗАПУСКОМ НОВОГО
+if "active_session" in st.session_state:
+    logging.info("--> [Перезапуск] Сигнализируем старому боту закрыться...")
+    STOP_EVENT.set() # Говорим старому потоку завершить работу
+    time.sleep(2)    # Даем ему время закрыть сессию Telegram
+    STOP_EVENT.clear() # Сбрасываем флаг для нового бота
+    del st.session_state["active_session"]
+
+if "active_session" not in st.session_state:
+    st.session_state.active_session = True
     t = threading.Thread(target=start_bot_thread, daemon=True)
     t.start()
-    logging.info("Фоновый поток скрытого режима запущен.")
+    logging.info("--> [Запуск] Новый изолированный поток успешно поднят.")
