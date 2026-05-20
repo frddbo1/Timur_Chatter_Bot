@@ -20,7 +20,7 @@ PRIMARY_MODEL = "llama-3.3-70b-versatile"
 FALLBACK_MODEL = "google/gemini-2.5-flash:free"  
 
 SYSTEM_PROMPT = (
-    "Ты — 14-летний подросток по имени Тимур. Ты сидишь в локальном групповом чате с друзьями в Telegram. У тебя аутизм."
+    "Ты — 14-летний подросток по имени Тимур. Ты сидишь в локальном групповом чате с друзьями in Telegram. У тебя аутизм."
     "Общайся как реальный парень из интернета: иронично, очень коротко, немного дерзко и с юмором. "
     "Реагируй строго на контекст беседы, подкалывай участников чата. "
     "ПРАВИЛА СТИЛЯ: пиши только маленькими буквами, используй молодежный сленг, "
@@ -30,7 +30,7 @@ SYSTEM_PROMPT = (
 CHANCE_TO_REPLY = 0.30  
 # ================================================
 
-st.title("🤖 Тимур Bot [V20 - Стабильный Движок]")
+st.title("🤖 Тимур Bot [V20 - Исправленный]")
 
 # Инициализация глобальных состояний в Streamlit
 if "CHATS_ACTIVITY" not in st.session_state:
@@ -87,12 +87,21 @@ def get_ai_joke(prompt: str) -> str:
     return random.choice(LOCAL_REPLIES)
 
 
+# Простой класс-контейнер для флага остановки
+class Signal:
+    def __init__(self): 
+        self._flag = False
+    def is_set(self): 
+        return self._flag
+    def set(self): 
+        self._flag = True
+
+
 # Функция, которая запускается внутри TimurThread
-def start_bot_thread(stop_event: asyncio.Event):
+def start_bot_thread(stop_signal):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
-    # Создаем бота и диспетчер строго внутри потока, с нуля!
     bot = Bot(token=TELEGRAM_TOKEN)
     dp = Dispatcher()
 
@@ -191,7 +200,7 @@ def start_bot_thread(stop_event: asyncio.Event):
 
     # Функция фонового мониторинга кнопки "Выключить"
     async def check_stop_signal():
-        while not stop_event.is_set():
+        while not stop_signal.is_set():
             await asyncio.sleep(0.5)
         logging.info("--> Получен сигнал остановки! Сворачиваем поллинг...")
         await dp.stop_polling()
@@ -202,7 +211,6 @@ def start_bot_thread(stop_event: asyncio.Event):
             await bot.delete_webhook(drop_pending_updates=True)
             logging.info("--> [Telegram API] Очередь очищена.")
             
-            # Запускаем одновременно поллинг и слежку за кнопкой выключения
             await asyncio.gather(
                 dp.start_polling(bot, handle_signals=False, allowed_updates=["message"]),
                 check_stop_signal()
@@ -216,26 +224,19 @@ def start_bot_thread(stop_event: asyncio.Event):
         loop.close()
         logging.info("--> Фоновый поток TimurThread полностью уничтожен и чист.")
 
+
 # --- ИНТЕРФЕЙС УПРАВЛЕНИЯ STREAMLIT ---
 col1, col2 = st.columns(2)
 
 with col1:
     if st.button("🚀 Включить бота", disabled=is_thread_alive):
-        # Создаем триггер остановки, который можно передать внутрь потока
-        stop_event_loop = asyncio.new_event_loop()
-        stop_event = stop_event_loop.run_until_complete(asyncio.Event()._loop.create_future())
-        
-        # Обернем в простой класс-контейнер для совместимости со Streamlit
-        class Signal:
-            def __init__(self): self._flag = False
-            def is_set(self): return self._flag
-            def set(self): self._flag = True
-            
-        st.session_state["BOT_STOP_EVENT"] = Signal()
+        # Создаем наш безопасный объект сигнала без вызова внутренних штук asyncio
+        sig = Signal()
+        st.session_state["BOT_STOP_EVENT"] = sig
         
         t = threading.Thread(
             target=start_bot_thread, 
-            args=(st.session_state["BOT_STOP_EVENT"],), 
+            args=(sig,), 
             name="TimurThread", 
             daemon=True
         )
@@ -247,7 +248,6 @@ with col1:
 with col2:
     if st.button("🛑 Выключить бота", disabled=not is_thread_alive):
         if st.session_state["BOT_STOP_EVENT"] is not None:
-            # Активируем флаг остановки, который мгновенно завершит циклы внутри потока
             st.session_state["BOT_STOP_EVENT"].set()
         
         st.warning("Отправлен сигнал на выключение. Поток уничтожается...")
