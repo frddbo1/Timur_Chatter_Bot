@@ -135,9 +135,11 @@ async def handle_chat(message: types.Message):
             print(f"Ошибка отправки: {e}")
 
 async def main():
-    await bot.delete_webhook(drop_pending_updates=True)
+    # drop_pending_updates=True — это самое важное! 
+    # Он принудительно закроет все старые сессии в Telegram
+    await bot.delete_webhook(drop_pending_updates=True) 
     print("--> Поллинг запущен успешно!")
-    await dp.start_polling(bot, allowed_updates=["message"])
+    await dp.start_polling(bot, allowed_updates=["message"], drop_pending_updates=True)
 
 if __name__ == "__main__":
     asyncio.run(main())
