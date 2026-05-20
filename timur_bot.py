@@ -108,9 +108,11 @@ async def cmd_start(message: types.Message):
 
 @dp.message()
 async def handle_chat(message: types.Message):
-    # Если глобально бот выключен — игнорируем апдейты
     if not globals().get("BOT_RUNNING_STATE", False):
         return
+
+    # ВСТАВЬ ЭТУ СТРОКУ ДЛЯ ПРОВЕРКИ:
+    logging.info(f"!!! БОТ УВИДЕЛ СООБЩЕНИЕ: {message.text} от {message.from_user.first_name if message.from_user else 'unknown'}")
 
     chat_id = message.chat.id
     if message.chat.type not in ["group", "supergroup"] or (message.from_user and message.from_user.is_bot):
