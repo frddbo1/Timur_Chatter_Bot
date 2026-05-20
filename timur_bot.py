@@ -16,14 +16,14 @@ logging.basicConfig(level=logging.INFO)
 TELEGRAM_TOKEN = "8455818639:AAEvMCnXthyxT-UMMvzwd1WRKAa3BMqdkQ0"
 GROQ_API_KEY = "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"
 
-# СЮДА ВСТАВЬ СВОЙ РАБОЧИЙ КЛЮЧ OPENROUTER (раз ты его создал, лучше впиши прямо в код)
+# УБЕДИСЬ, ЧТО ТУТ СТОИТ ТВОЙ РАБОЧИЙ КЛЮЧ
 OPENROUTER_API_KEY = "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"
 
-PRIMARY_MODEL = "llama-3.1-70b-versatile" # Умная модель на Groq
-FALLBACK_MODEL = "meta-llama/llama-3.1-8b-instruct:free" # Бесплатная Llama 3.1 на OpenRouter
+PRIMARY_MODEL = "llama-3.1-70b-versatile" 
+FALLBACK_MODEL = "meta-llama/llama-3.1-8b-instruct:free" 
 
-# Метка для полной блокировки старых копий скрипта
-CURRENT_VERSION = "v6_router_fixed"
+# Абсолютно новый маркер версии для тотальной блокировки
+CURRENT_VERSION = "v7_ultimate_nuclear_stop"
 
 SYSTEM_PROMPT = (
     "Ты — 14-летний парень по имени Тимур, сидишь в lokalnom групповом чате в Telegram. "
@@ -35,25 +35,23 @@ SYSTEM_PROMPT = (
     "Никакого вежливого тона нейросети, ты обычный чел из чата."
 )
 
-CHANCE_TO_REPLY = 0.30  # Шанс авто-ответа 30%
+CHANCE_TO_REPLY = 0.30  
 SILENCE_TIMEOUT = 3000
 # ================================================
 
-# ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
 if "CHATS_ACTIVITY" not in globals():
     CHATS_ACTIVITY = {}
 if "LAST_REPLY_TIME" not in globals():
     LAST_REPLY_TIME = {}
 globals()["GLOBAL_VERSION"] = CURRENT_VERSION
 
-st.title("🤖 Панель управления Тимуром [V6 Router Active]")
-st.subheader("Статус: Активен (Фоновый поток Python 3.14)")
-st.write(f"Текущая активная версия: **{globals()['GLOBAL_VERSION']}**")
+st.title("🤖 Панель управления Тимуром [V7 Nuclear]")
+st.subheader("Статус: Очистка серверов завершена")
 
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 
-# ЛОКАЛЬНЫЙ СПИСОК ФРАЗ (Только на случай полного падения интернета)
+# ИСКЛЮЧИТЕЛЬНО ЖИВЫЕ ОДНОСТРОЧНИКИ ДЛЯ МАСКИРОВКИ
 LOCAL_REPLIES = [
     "че ты высрал вообще я нихуя не понял",
     "ебать ты умный конечно завали ебало пж",
@@ -71,78 +69,50 @@ LOCAL_REPLIES = [
 ]
 
 def get_ai_joke(prompt: str) -> str:
-    """Запрос с обходом лимитов через Groq и рабочий OpenRouter"""
     # 1. ЗАПРОС К GROQ
     url_groq = "https://api.groq.com/openai/v1/chat/completions"
-    headers_groq = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
+    headers_groq = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
     payload_groq = {
         "model": PRIMARY_MODEL,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 1.2,
-        "max_tokens": 150
+        "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
+        "temperature": 1.2, "max_tokens": 150
     }
-    
     try:
-        logging.info("--> [Groq] Запрос к умной модели 70B...")
         response = requests.post(url_groq, headers=headers_groq, json=payload_groq, timeout=8)
         result = response.json()
         if "choices" in result:
             return result["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        logging.error(f"--> [Groq Ошибка]: {e}")
+    except Exception:
+        pass
 
-    # 2. РЕЗЕРВНЫЙ ВАРИАНТ — РАБОЧИЙ OPENROUTER
+    # 2. РЕЗЕРВНЫЙ ВАРИАНТ — OPENROUTER
     url_or = "https://openrouter.ai/api/v1/chat/completions"
-    headers_or = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json"
-    }
+    headers_or = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
     payload_or = {
         "model": FALLBACK_MODEL,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 1.2,
-        "max_tokens": 150
+        "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
+        "temperature": 1.2, "max_tokens": 150
     }
-    
     try:
-        logging.info("--> [OpenRouter] Запрос к резервной Llama 3.1...")
         response = requests.post(url_or, headers=headers_or, json=payload_or, timeout=8)
         result = response.json()
         if "choices" in result:
-            logging.info("--> [OpenRouter Успех] Резерв ответил!")
             return result["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        logging.error(f"--> [OpenRouter Ошибка]: {e}")
+    except Exception:
+        pass
 
-    # 3. ФОЛБЕК
+    # 3. ФОЛБЕК БЕЗ ПАЛЕВА ПЕРЕД ПАЦАНАМИ
     return random.choice(LOCAL_REPLIES)
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     await message.answer("ебать короче я роботаю")
 
-@dp.message(Command("reset"))
-async def cmd_reset(message: types.Message):
-    global CHATS_ACTIVITY
-    chat_id = message.chat.id
-    if chat_id in CHATS_ACTIVITY:
-        CHATS_ACTIVITY[chat_id]["context"] = []
-    await message.reply("память чиста")
-
 @dp.message()
 async def handle_chat(message: types.Message):
     global CHATS_ACTIVITY, LAST_REPLY_TIME
     
-    # СТОП-КРАН: Старые версии потоков молча сбрасывают выполнение
+    # ЖЕСТКАЯ ПРОВЕРКА ВЕРСИИ ПОТОКА
     if globals().get("GLOBAL_VERSION") != CURRENT_VERSION:
         return
 
@@ -191,32 +161,15 @@ async def handle_chat(message: types.Message):
         except Exception as e:
             logging.error(f"Ошибка отправки: {e}")
 
-async def silence_checker():
-    while globals().get("GLOBAL_VERSION") == CURRENT_VERSION:
-        await asyncio.sleep(60)
-        now = datetime.now()
-        for chat_id, data in list(CHATS_ACTIVITY.items()):
-            if now - data["last_message_time"] > timedelta(seconds=SILENCE_TIMEOUT):
-                chat_history = "\n".join(data["context"])
-                prompt = f"В чате тишина. Последнее обсуждение:\n{chat_history}\n\nНапиши один короткий провокационный вброс."
-                joke = get_ai_joke(prompt)
-                try:
-                    await bot.send_message(chat_id, joke)
-                    CHATS_ACTIVITY[chat_id]["last_message_time"] = datetime.now()
-                except Exception as e:
-                    logging.error(f"Ошибка чекера тишины: {e}")
-
 def start_bot_thread():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.create_task(silence_checker())
     loop.run_until_complete(dp.start_polling(bot, handle_signals=False))
 
-# Перезаписываем глобальную версию
 globals()["GLOBAL_VERSION"] = CURRENT_VERSION
 
-if "bot_thread_v6" not in st.session_state:
-    st.session_state.bot_thread_v6 = True
+if "bot_thread_v7" not in st.session_state:
+    st.session_state.bot_thread_v7 = True
     t = threading.Thread(target=start_bot_thread, daemon=True)
     t.start()
     logging.info(f"--> [Запуск] Поток {CURRENT_VERSION} поднят.")
