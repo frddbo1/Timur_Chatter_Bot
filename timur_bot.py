@@ -74,7 +74,7 @@ async def cmd_reset(message: types.Message):
     chat_id = message.chat.id
     if chat_id in CHATS_ACTIVITY:
         CHATS_ACTIVITY[chat_id]["context"] = []
-    await message.reply("память чиста")
+    await message.reply("ебать вы мне стерли память нахуй пидарасы аыааааа я умираю ааа , . . . .    привет) ")
 
 @dp.message()
 async def handle_chat(message: types.Message):
