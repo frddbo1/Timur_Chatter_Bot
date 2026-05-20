@@ -143,21 +143,18 @@ async def handle_chat(message: types.Message):
     content_type = "text"
     msg_log_text = message.text if message.text else ""
 
+    # Проверяем медиа и вытаскиваем подпись, если она есть
     if message.photo:
         content_type = "photo"
-        msg_log_text = "[Фотография]"
+        msg_log_text = message.caption if message.caption else "[Фотография]"
     elif message.animation:
         content_type = "gif"
-        msg_log_text = "[Гифка]"
+        msg_log_text = message.caption if message.caption else "[Гифка]"
     elif message.sticker:
         content_type = "sticker"
         msg_log_text = f"[Стикер: {message.sticker.emoji or ''}]"
     
-    # Если это не текст и не поддерживаемое медиа — выходим
-    if content_type == "text" and not message.text:
-        return
-
-    # Отладочный лог в консоль Streamlit
+    # Отладочный лог в консоль — теперь мы точно увидим, что зашло в хэндлер
     logging.info(f"!!! БОТ УВИДЕЛ СООБЩЕНИЕ ({content_type}): '{msg_log_text}' от {user_name}")
 
     # Сохраняем историю
@@ -166,27 +163,35 @@ async def handle_chat(message: types.Message):
         activity[chat_id] = {"last_message_time": datetime.now(), "context": []}
     
     activity[chat_id]["last_message_time"] = datetime.now()
-    activity[chat_id]["context"].append(f"{user_name}: {msg_log_text}")
+    
+    # Чтобы ИИ понимал, что это медиа, пишем в контекст понятный текст
+    log_to_context = msg_log_text if not msg_log_text.startswith("[") else f"скинул {content_type}"
+    activity[chat_id]["context"].append(f"{user_name}: {log_to_context}")
     
     if len(activity[chat_id]["context"]) > 5:
         activity[chat_id]["context"].pop(0)
 
     bot_info = await bot.get_me()
     
-    # Подготовка условий для ответа
-    text_lower = message.text.lower() if message.text else ""
+    # Приводим к нижнему регистру текст ИЛИ подпись к фото/гифке
+    text_lower = msg_log_text.lower()
+    
     is_mentioned_via_dog = f"@{bot_info.username}".lower() in text_lower
     is_reply_to_bot = message.reply_to_message and message.reply_to_message.from_user.id == bot_info.id
     is_name_called = "тимур" in text_lower
     random_strike = random.random() < CHANCE_TO_REPLY
+
+    # Жёсткий лог условий для отладки, если бот промолчал
+    logging.info(f"Проверка триггеров: тег={is_mentioned_via_dog}, реплай={is_reply_to_bot}, имя={is_name_called}, рандом={random_strike}")
 
     # Бот реагирует, если его тегнули, ответили реплаем, написали имя или выпал рандом
     if is_mentioned_via_dog or is_reply_to_bot or is_name_called or random_strike:
         current_time = time.time()
         last_time = globals()["LAST_REPLY_TIME"].get(chat_id, 0)
         
-        # Твоя антифлуд-пауза (2 секунды)
+        # Антифлуд-пауза (2 секунды)
         if current_time - last_time < 2:
+            logging.info("Отмена ответа: сработал антифлуд-таймер")
             return  
 
         globals()["LAST_REPLY_TIME"][chat_id] = current_time
