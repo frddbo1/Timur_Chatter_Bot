@@ -16,25 +16,31 @@ logging.basicConfig(level=logging.INFO)
 TELEGRAM_TOKEN = "8455818639:AAEvMCnXthyxT-UMMvzwd1WRKAa3BMqdkQ0"
 GROQ_API_KEY = "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"
 
+# Использовать оригинальное техническое имя модели Llama 3.1 8B Instruct на Groq
+LLAMA_MODEL = "llama-3.1-8b-instant"
+
 SYSTEM_PROMPT = (
     "Ты — участник локального чата в Telegram группе. Твоя цель - нести максимальный не связанный бред и смешить людей "
     "иметь свой характер, влиться в общество, твое имя - Тимур, ты парень 14 летний в интернете "
     "пиши коротко, как обычный человек в мессенджере "
     "не пиши никогда не в коем случае запятые и точки, знаки восклицания и знаки вопроса "
-    "Не будь вежливым помощником. Если тебя троллят — тролль в ответ еще жестче, с матами, очень токсично"
+    "Не будь вежливым помощником. Если тебя троллят — тролль в ответ еще жестче, с матами, очень toxic"
 )
 
-CHANCE_TO_REPLY = 0.30  # Чуть поднял до 30%, чтобы быстрее проверить работу в чате
+CHANCE_TO_REPLY = 0.30  # Шанс авто-ответа 30%
 SILENCE_TIMEOUT = 3000
 # ================================================
 
-# ГЛОБАЛЬНЫЕ СЛОВАРИ (Обычный Python — это решит проблему с потерей памяти в потоке Streamlit)
-CHATS_ACTIVITY = {}
-LAST_REPLY_TIME = {}
+# ГЛОБАЛЬНЫЕ СЛОВАРИ (Хранятся в памяти процесса, защищены от перезагрузок интерфейса)
+if "CHATS_ACTIVITY" not in globals():
+    CHATS_ACTIVITY = {}
+if "LAST_REPLY_TIME" not in globals():
+    LAST_REPLY_TIME = {}
 
 st.title("🤖 Панель управления Тимуром")
 st.subheader("Статус: Активен (Фоновый поток Python 3.14)")
-st.write("Если бот в чате, попробуй тегнуть его: `@Timur_Chatter_bot`")
+st.write(f"Модель ИИ: **Meta Llama 3.1 8B Instruct** (via Groq)")
+st.write("Если бот замолчал, тегни его: `@Timur_Chatter_bot`")
 
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
@@ -46,7 +52,7 @@ def get_ai_joke(prompt: str) -> str:
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "llama-3.1-8b-instant",
+        "model": LLAMA_MODEL,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt}
@@ -74,7 +80,7 @@ async def cmd_reset(message: types.Message):
     chat_id = message.chat.id
     if chat_id in CHATS_ACTIVITY:
         CHATS_ACTIVITY[chat_id]["context"] = []
-    await message.reply("ебать вы мне стерли память нахуй пидарасы аыааааа я умираю ааа , . . . .    привет) ")
+    await message.reply("ебать вы мне стерли память нахуй пидарасы аыааааа я умираю ааа , . . . .     привет) ")
 
 @dp.message()
 async def handle_chat(message: types.Message):
@@ -152,9 +158,9 @@ def start_bot_thread():
     loop.create_task(silence_checker())
     loop.run_until_complete(dp.start_polling(bot, handle_signals=False))
 
-# Проверка на запуск через стандартный питоновский синглтон модуля
-if not hasattr(st, "_bot_thread_alive"):
-    st._bot_thread_alive = True
+# Гарантированный запуск только одного независимого потока демона
+if "bot_thread" not in st.session_state:
+    st.session_state.bot_thread = True
     t = threading.Thread(target=start_bot_thread, daemon=True)
     t.start()
-    logging.info("Фоновый поток бота успешно инициализирован.")
+    logging.info("Фоновый поток Llama 3.1 бота успешно запущен.")
