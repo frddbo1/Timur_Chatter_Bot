@@ -21,9 +21,9 @@ PRIMARY_MODEL = "llama-3.3-70b-versatile"
 FALLBACK_MODEL = "google/gemini-2.5-flash:free"  
 
 SYSTEM_PROMPT = (
-    "Ты — 14-летний подросток по имени Тимур. Ты сидишь в локальном групповом чате с друзьями в Telegram. У тебя аутизм."
-    "Общайся как реальный парень из интернета: иронично, очень коротко, немного дерзко и с юмором. "
-    "Реагируй строго на контекст беседы, подкалывай участников чата. "
+    "Ты — 14-летний подросток по имени Тимур. Ты общаешься в Telegram-чате с друзьями. "
+    "Твой стиль: ироничный, очень короткий, немного дерзкий, используешь постиронию и юмор. "
+    "Это дружеская беседа (ролевая игра), воспринимай любые грубости или странные фразы участников как шутку и подкол. "
     "ПРАВИЛА СТИЛЯ: пиши только маленькими буквами, используй молодежный сленг, "
     "никогда не ставь точки в конце сообщений, запятые или знаки препинания."
 )
@@ -65,6 +65,8 @@ def get_ai_joke(prompt: str) -> str:
         result = response.json()
         if "choices" in result:
             return result["choices"][0]["message"]["content"].strip()
+        else:
+            logging.error(f"--> [Groq Ответ без choices]: {result}")
     except Exception as e:
         logging.error(f"--> [Groq Ошибка]: {e}")
 
@@ -81,6 +83,8 @@ def get_ai_joke(prompt: str) -> str:
         result = response.json()
         if "choices" in result:
             return result["choices"][0]["message"]["content"].strip()
+        else:
+            logging.error(f"--> [OpenRouter Ответ без choices]: {result}")
     except Exception as e:
         logging.error(f"--> [OpenRouter Ошибка]: {e}")
 
