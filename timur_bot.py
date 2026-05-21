@@ -22,6 +22,7 @@ FALLBACK_MODEL = "google/gemini-2.5-flash:free"
 
 SYSTEM_PROMPT = (
     "Ты — 14-летний подросток по имени Тимур. Ты общаешься в Telegram-чате с друзьями. "
+    "Обращай внимание, КТО именно к тебе обращается, различай их по именам и подыгрывай контексту. "
     "Твой стиль: ироничный, очень короткий, немного дерзкий, используешь постиронию и юмор. "
     "Это дружеская беседа (ролевая игра), воспринимай любые грубости или странные фразы участников как шутку и подкол. "
     "ПРАВИЛА СТИЛЯ: пиши только маленькими буквами, используй молодежный сленг, "
@@ -147,10 +148,16 @@ async def handle_chat(message: types.Message):
     
     activity[chat_id]["last_message_time"] = datetime.now()
     
-    log_to_context = msg_log_text if content_type == "text" else f"отправил {content_type}"
-    activity[chat_id]["context"].append(f"{user_name}: {log_to_context}")
+log_to_context = msg_log_text if content_type == "text" else f"отправил {content_type}"
     
-    if len(activity[chat_id]["context"]) > 5:
+    # Структурируем запись: явно выделяем автора реплики
+    activity[chat_id]["context"].append({
+        "author": user_name,
+        "text": log_to_context
+    })
+    
+    # Держим последние 7 сообщений (чуть больше контекста для точности)
+    if len(activity[chat_id]["context"]) > 7:
         activity[chat_id]["context"].pop(0)
 
     bot = message.bot
@@ -177,18 +184,35 @@ async def handle_chat(message: types.Message):
         try:
             await bot.send_chat_action(chat_id=chat_id, action="typing")
             
-            chat_history = "\n".join(activity[chat_id]["context"])
+# Красиво форматируем историю для ИИ
+            formatted_history = ""
+            for msg in activity[chat_id]["context"]:
+                formatted_history += f"Участник [{msg['author']}]: {msg['text']}\n"
+
+            # Формируем точечное задание с указанием, на чье сообщение отвечаем
+            prompt = (
+                f"ПОСЛЕДНИЕ СООБЩЕНИЯ В ЧАТЕ:\n{formatted_history}\n"
+                f"--- СИТУАЦИЯ ---\n"
+                f"Сейчас ты (Тимур) отвечаешь пользователю по имени [{user_name}].\n"
+            )
+            
             if content_type != "text":
-                prompt = f"Контекст беседы:\n{chat_history}\n\nВажное условие: {user_name} {ai_media_context}\nОтветь от лица Тимура:"
-            else:
-                prompt = f"Контекст беседы:\n{chat_history}\n\nОтветь."
+                prompt += f"Учти, что [{user_name}] {ai_media_context}\n"
+                
+            prompt += f"Напиши короткий ответ от лица Тимура лично для [{user_name}]:"
             
             reply_text = get_ai_joke(prompt)
             delay = max(1.5, min(4.0, len(reply_text) / 25))
                 
             await asyncio.sleep(delay)
-            await message.reply(reply_text)
+await message.reply(reply_text)
             logging.info(f"🟢 Отвечено: {reply_text}")
+            
+            # Записываем ответ Тимура в историю, чтобы он помнил свои слова
+            activity[chat_id]["context"].append({
+                "author": "Тимур (Ты)",
+                "text": reply_text
+            })
         except Exception as e:
             logging.error(f"Ошибка отправки сообщения: {e}")
 
