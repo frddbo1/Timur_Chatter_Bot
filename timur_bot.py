@@ -139,7 +139,7 @@ async def handle_chat(message: types.Message):
         msg_log_text = "[Кружочек]"
         ai_media_context = "*(скинул кружочек в чат. подколоти его за лицо)*"
 
-   logging.info(f"!!! БОТ УВИДЕЛ СООБЩЕНИЕ ({content_type}): '{msg_log_text}' от {user_name}")
+    logging.info(f"!!! БОТ УВИДЕЛ СООБЩЕНИЕ ({content_type}): '{msg_log_text}' от {user_name}")
 
     # ИСПОЛЬЗУЕМ СЛОВАРЬ ИЗ shared_data ВМЕСТО st.session_state
     activity = shared_data.CHATS_ACTIVITY
@@ -150,7 +150,6 @@ async def handle_chat(message: types.Message):
     
     log_to_context = msg_log_text if content_type == "text" else f"отправил {content_type}"
     
-    # ВОТ ЭТОТ БЛОК СЛЕТАЛ. СЕЙЧАС ТУТ РОВНО ПО 4 ПРОБЕЛА ДЛЯ КАЖДОГО УРОВНЯ:
     activity[chat_id]["context"].append({
         "author": user_name,
         "text": log_to_context
@@ -171,7 +170,6 @@ async def handle_chat(message: types.Message):
     if is_mentioned_via_dog or is_reply_to_bot or is_name_called or random_strike:
         current_time = time.time()
         
-        # Защита от флуда на базе глобального словаря процесса
         global LOCAL_LAST_REPLY_TIME
         last_time = LOCAL_LAST_REPLY_TIME.get(chat_id, 0)
         
@@ -183,12 +181,10 @@ async def handle_chat(message: types.Message):
         try:
             await bot.send_chat_action(chat_id=chat_id, action="typing")
             
-# Красиво форматируем историю для ИИ
             formatted_history = ""
             for msg in activity[chat_id]["context"]:
                 formatted_history += f"Участник [{msg['author']}]: {msg['text']}\n"
 
-            # Формируем точечное задание с указанием, на чье сообщение отвечаем
             prompt = (
                 f"ПОСЛЕДНИЕ СООБЩЕНИЯ В ЧАТЕ:\n{formatted_history}\n"
                 f"--- СИТУАЦИЯ ---\n"
@@ -204,10 +200,9 @@ async def handle_chat(message: types.Message):
             delay = max(1.5, min(4.0, len(reply_text) / 25))
                 
             await asyncio.sleep(delay)
-await message.reply(reply_text)
+            await message.reply(reply_text)
             logging.info(f"🟢 Отвечено: {reply_text}")
             
-            # Записываем ответ Тимура в историю, чтобы он помнил свои слова
             activity[chat_id]["context"].append({
                 "author": "Тимур (Ты)",
                 "text": reply_text
