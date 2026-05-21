@@ -76,7 +76,7 @@ def get_ai_joke(prompt: str) -> str:
     payload_or = {
         "model": FALLBACK_MODEL,
         "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
-        "temperature": 1.2, "max_tokens": 100
+        "temperature": 2, "max_tokens": 100
     }
     try:
         logging.info(f"--> [OpenRouter] Пробую резерв {FALLBACK_MODEL}...")
