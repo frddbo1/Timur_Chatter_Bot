@@ -53,41 +53,42 @@ LOCAL_REPLIES = [
 ]
 
 def get_ai_joke(prompt: str) -> str:
-    url_groq = "https://api.groq.com/openai/v1/chat/completions"
-    headers_groq = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
-    payload_groq = {
+    url_or = "https://openrouter.ai/api/v1/chat/completions"
+    headers_or = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
+    
+    # --- Попытка 1: Свободная Gemini 2.5 Flash через OpenRouter ---
+    payload_primary = {
         "model": PRIMARY_MODEL,
         "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
         "temperature": 1.2, "max_tokens": 100
     }
     try:
-        logging.info(f"--> [Groq] Запрос к {PRIMARY_MODEL}...")
-        response = requests.post(url_groq, headers=headers_groq, json=payload_groq, timeout=8)
+        logging.info(f"--> [OpenRouter] Запрос к основной модели {PRIMARY_MODEL}...")
+        response = requests.post(url_or, headers=headers_or, json=payload_primary, timeout=8)
         result = response.json()
         if "choices" in result:
             return result["choices"][0]["message"]["content"].strip()
         else:
-            logging.error(f"--> [Groq Ответ без choices]: {result}")
+            logging.error(f"--> [OpenRouter Primary Ошибка]: {result}")
     except Exception as e:
-        logging.error(f"--> [Groq Ошибка]: {e}")
+        logging.error(f"--> [OpenRouter Primary Исключение]: {e}")
 
-    url_or = "https://openrouter.ai/api/v1/chat/completions"
-    headers_or = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
-    payload_or = {
+    # --- Попытка 2: Резервная Llama 3.3 Instruct через OpenRouter ---
+    payload_fallback = {
         "model": FALLBACK_MODEL,
         "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
-        "temperature": 2, "max_tokens": 100
+        "temperature": 1.2, "max_tokens": 100
     }
     try:
-        logging.info(f"--> [OpenRouter] Пробую резерв {FALLBACK_MODEL}...")
-        response = requests.post(url_or, headers=headers_or, json=payload_or, timeout=8)
+        logging.info(f"--> [OpenRouter] Пробую резервную модель {FALLBACK_MODEL}...")
+        response = requests.post(url_or, headers=headers_or, json=payload_fallback, timeout=8)
         result = response.json()
         if "choices" in result:
             return result["choices"][0]["message"]["content"].strip()
         else:
-            logging.error(f"--> [OpenRouter Ответ без choices]: {result}")
+            logging.error(f"--> [OpenRouter Fallback Ошибка]: {result}")
     except Exception as e:
-        logging.error(f"--> [OpenRouter Ошибка]: {e}")
+        logging.error(f"--> [OpenRouter Fallback Исключение]: {e}")
 
     return random.choice(LOCAL_REPLIES)
 
