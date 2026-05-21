@@ -139,7 +139,7 @@ async def handle_chat(message: types.Message):
         msg_log_text = "[Кружочек]"
         ai_media_context = "*(скинул кружочек в чат. подколоти его за лицо)*"
 
-    logging.info(f"!!! БОТ УВИДЕЛ СООБЩЕНИЕ ({content_type}): '{msg_log_text}' от {user_name}")
+   logging.info(f"!!! БОТ УВИДЕЛ СООБЩЕНИЕ ({content_type}): '{msg_log_text}' от {user_name}")
 
     # ИСПОЛЬЗУЕМ СЛОВАРЬ ИЗ shared_data ВМЕСТО st.session_state
     activity = shared_data.CHATS_ACTIVITY
@@ -148,15 +148,14 @@ async def handle_chat(message: types.Message):
     
     activity[chat_id]["last_message_time"] = datetime.now()
     
-log_to_context = msg_log_text if content_type == "text" else f"отправил {content_type}"
+    log_to_context = msg_log_text if content_type == "text" else f"отправил {content_type}"
     
-    # Структурируем запись: явно выделяем автора реплики
+    # ВОТ ЭТОТ БЛОК СЛЕТАЛ. СЕЙЧАС ТУТ РОВНО ПО 4 ПРОБЕЛА ДЛЯ КАЖДОГО УРОВНЯ:
     activity[chat_id]["context"].append({
         "author": user_name,
         "text": log_to_context
     })
     
-    # Держим последние 7 сообщений (чуть больше контекста для точности)
     if len(activity[chat_id]["context"]) > 7:
         activity[chat_id]["context"].pop(0)
 
