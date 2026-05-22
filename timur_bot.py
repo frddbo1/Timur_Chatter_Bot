@@ -21,8 +21,8 @@ GROQ_API_KEY = "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"
 OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]
 
 # Самые стабильные и неубиваемые модели на OpenRouter
-PRIMARY_MODEL = "meta-llama/llama-3.3-70b-instruct"  
-FALLBACK_MODEL = "google/gemini-2.5-flash"
+PRIMARY_MODEL = "llama3-8b-8192"  # Это для Groq (жрёт очень мало токенов лимита)
+FALLBACK_MODEL = "meta-llama/llama-3-8b-instruct:free"
 # ================================================
 
 SYSTEM_PROMPT = (
@@ -58,42 +58,45 @@ LOCAL_REPLIES = [
 ]
 
 def get_ai_joke(prompt: str) -> str:
-    url_or = "https://openrouter.ai/api/v1/chat/completions"
-    headers_or = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
-    
-    # --- Попытка 1: Свободная Gemini 2.5 Flash через OpenRouter ---
-    payload_primary = {
+    # --- Попытка 1: Groq (Llama 3 8B) ---
+    url_groq = "https://api.groq.com/openai/v1/chat/completions"
+    headers_groq = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+    payload_groq = {
         "model": PRIMARY_MODEL,
         "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
-        "temperature": 1.2, "max_tokens": 100
+        "temperature": 1.2, "max_tokens": 80  # Поджали токены, чтобы точно влезть в лимит
     }
+    
     try:
-        logging.info(f"--> [OpenRouter] Запрос к основной модели {PRIMARY_MODEL}...")
-        response = requests.post(url_or, headers=headers_or, json=payload_primary, timeout=8)
+        logging.info(f"--> [Groq] Запрос к основной модели {PRIMARY_MODEL}...")
+        response = requests.post(url_groq, headers=headers_groq, json=payload_groq, timeout=6)
         result = response.json()
         if "choices" in result:
             return result["choices"][0]["message"]["content"].strip()
         else:
-            logging.error(f"--> [OpenRouter Primary Ошибка]: {result}")
+            logging.error(f"--> [Groq Ошибка]: {result}")
     except Exception as e:
-        logging.error(f"--> [OpenRouter Primary Исключение]: {e}")
+        logging.error(f"--> [Groq Исключение]: {e}")
 
-    # --- Попытка 2: Резервная Llama 3.3 Instruct через OpenRouter ---
-    payload_fallback = {
+    # --- Попытка 2: OpenRouter (Бесплатная Llama) ---
+    url_or = "https://openrouter.ai/api/v1/chat/completions"
+    headers_or = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
+    payload_or = {
         "model": FALLBACK_MODEL,
         "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
-        "temperature": 1.2, "max_tokens": 100
+        "temperature": 1.2, "max_tokens": 80
     }
+    
     try:
-        logging.info(f"--> [OpenRouter] Пробую резервную модель {FALLBACK_MODEL}...")
-        response = requests.post(url_or, headers=headers_or, json=payload_fallback, timeout=8)
+        logging.info(f"--> [OpenRouter] Пробую резерв {FALLBACK_MODEL}...")
+        response = requests.post(url_or, headers=headers_or, json=payload_or, timeout=6)
         result = response.json()
         if "choices" in result:
             return result["choices"][0]["message"]["content"].strip()
         else:
-            logging.error(f"--> [OpenRouter Fallback Ошибка]: {result}")
+            logging.error(f"--> [OpenRouter Резерв Ошибка]: {result}")
     except Exception as e:
-        logging.error(f"--> [OpenRouter Fallback Исключение]: {e}")
+        logging.error(f"--> [OpenRouter Резерв Исключение]: {e}")
 
     return random.choice(LOCAL_REPLIES)
 
