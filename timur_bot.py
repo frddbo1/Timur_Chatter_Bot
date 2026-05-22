@@ -21,8 +21,8 @@ GROQ_API_KEY = "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"
 OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]
 
 # Самые стабильные и неубиваемые модели на OpenRouter
-PRIMARY_MODEL = "llama-3.1-8b-instant"  # Это для Groq (жрёт очень мало токенов лимита)
-FALLBACK_MODEL = "openai/gpt-oss-20b"
+PRIMARY_MODEL = "openai/gpt-oss-20b"  # Это для Groq (жрёт очень мало токенов лимита)
+FALLBACK_MODEL = "llama-3.1-8b-instant"
 # ================================================
 
 SYSTEM_PROMPT = (
