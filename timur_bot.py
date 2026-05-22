@@ -20,8 +20,9 @@ GROQ_API_KEY = "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"
 
 OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]
 
-PRIMARY_MODEL = "google/gemini-2.5-flash"        
-FALLBACK_MODEL = "meta-llama/llama-3.3-70b-instruct:free"  
+# Меняем на модели, которые на 100% бесплатны и стабильны прямо сейчас
+PRIMARY_MODEL = "meta-llama/llama-3-8b-instruct:free"        
+FALLBACK_MODEL = "mistralai/mistral-7b-instruct:free"
 # ================================================
 
 SYSTEM_PROMPT = (
