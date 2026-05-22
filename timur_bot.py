@@ -18,8 +18,7 @@ import streamlit as st  # Убедись, что импорт streamlit есть
 TELEGRAM_TOKEN = "8455818639:AAEvMCnXthyxT-UMMvzwd1WRKAa3BMqdkQ0"
 GROQ_API_KEY = "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"
 
-# ТЕПЕРЬ БОТ БЕРЕТ КЛЮЧ ИЗ НАСТРОЕК СТРИМЛИТА, В КОДЕ ЕГО БОЛЬШЕ НЕТ:
-OPENROUTER_API_KEY = st.secrets["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"]
+OPENROUTER_API_KEY = st.secrets["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"]
 
 PRIMARY_MODEL = "google/gemini-2.5-flash"        
 FALLBACK_MODEL = "meta-llama/llama-3.3-70b-instruct:free"  
