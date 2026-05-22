@@ -15,10 +15,10 @@ logging.basicConfig(level=logging.INFO)
 import streamlit as st  # Убедись, что импорт streamlit есть вверху файла
 
 # ================= КОНФИГУРАЦИЯ =================
-TELEGRAM_TOKEN = "8455818639:AAEvMCnXthyxT-UMMvzwd1WRKAa3BMqdkQ0"
-GROQ_API_KEY = "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"
+TELEGRAM_TOKEN = ""
+GROQ_API_KEY = ""
 
-OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]
+OPENROUTER_API_KEY = st.secrets[""]
 
 # Меняем на модели, которые на 100% бесплатны и стабильны прямо сейчас
 PRIMARY_MODEL = "meta-llama/llama-3-8b-instruct:free"        
