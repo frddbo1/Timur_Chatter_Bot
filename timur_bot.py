@@ -20,10 +20,9 @@ GROQ_API_KEY = "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"
 
 OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]
 
-# Меняем на модели, которые на 100% бесплатны и стабильны прямо сейчас
-# Актуальные и стабильные бесплатные модели на OpenRouter
-PRIMARY_MODEL = "meta-llama/llama-3.1-8b-instruct:free"        
-FALLBACK_MODEL = "google/gemma-2-9b-it:free"
+# Самые стабильные и неубиваемые модели на OpenRouter
+PRIMARY_MODEL = "meta-llama/llama-3.3-70b-instruct"  
+FALLBACK_MODEL = "google/gemini-2.5-flash"
 # ================================================
 
 SYSTEM_PROMPT = (
