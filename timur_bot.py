@@ -17,8 +17,8 @@ TELEGRAM_TOKEN = "8455818639:AAEvMCnXthyxT-UMMvzwd1WRKAa3BMqdkQ0"
 GROQ_API_KEY = "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"
 OPENROUTER_API_KEY = "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"
 
-PRIMARY_MODEL = "google/gemini-2.5-flash:free"  # Теперь основная (у неё огромные лимиты)
-FALLBACK_MODEL = "llama-3.3-70b-versatile"      # Резерв
+PRIMARY_MODEL = "google/gemini-2.5-flash"  
+FALLBACK_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
 
 SYSTEM_PROMPT = (
     "Ты — 14-летний подросток по имени Тимур. Ты общаешься в Telegram-чате с друзьями. "
