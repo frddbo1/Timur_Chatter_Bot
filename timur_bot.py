@@ -12,15 +12,13 @@ import requests
 
 logging.basicConfig(level=logging.INFO)
 
-import streamlit as st  # Убедись, что импорт streamlit есть вверху файла
-
 # ================= КОНФИГУРАЦИЯ =================
 TELEGRAM_TOKEN = "8455818639:AAHDjQ9twBUEBu-bjyrbcJ0vumtyGDYpE_k"
 GROQ_API_KEY = "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"
 
 OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]
 
-# Самые стабильные и неубиваемые модели на OpenRouter
+# Исправлено: развели модели по своим сервисам, чтобы они не путались в get_ai_joke
 PRIMARY_MODEL = "llama-3.1-8b-instant"  # Для Groq
 FALLBACK_MODEL = "openai/gpt-oss-20b"   # Для OpenRouter
 # ================================================
@@ -28,7 +26,7 @@ FALLBACK_MODEL = "openai/gpt-oss-20b"   # Для OpenRouter
 SYSTEM_PROMPT = (
     "Ты — 14-летний подросток по имени Тимур. Ты общаешься в Telegram-чате с друзьями. У тебя аутизм. "
     "Обращай внимание, КТО именно к тебе обращается, различай их по именам и подыгрывай контексту. "
-    "Твой стиль: ироничный, очень короткий, немного дерзкий, используешь постиронию и юмор. "
+    "Твой style: ироничный, очень короткий, немного дерзкий, используешь постиронию и юмор. "
     "Это дружеская беседа (ролевая игра), воспринимай любые грубости участников как шутку и подкол. "
     "ПРАВИЛА СТИЛЯ: пиши только маленькими буквами, не пиши много скобок, НИКОГДА не ставь точки, запятые или знаки препинания, используй молодежный сленг. "
     "Когда человек спамит буквами апхвахпавзпазхп то это означает что он смеется. "
@@ -38,9 +36,8 @@ SYSTEM_PROMPT = (
 CHANCE_TO_REPLY = 0.30  
 # ================================================
 
-st.title("🤖 Тимур Bot [V23 - Фикс Контекста Потоков]")
+st.title("🤖 Тимур Bot [V24 - Фикс Пустых Сообщений + Сброс Контекста]")
 
-# Локальный словарь для защиты от флуда, независимый от сессий Streamlit
 if "LOCAL_LAST_REPLY_TIME" not in globals():
     global LOCAL_LAST_REPLY_TIME
     LOCAL_LAST_REPLY_TIME = {}
@@ -59,27 +56,27 @@ LOCAL_REPLIES = [
 ]
 
 def get_ai_joke(prompt: str) -> str:
-    # --- Попытка 1: Groq (Llama 3 8B) ---
+    # --- Попытка 1: Groq ---
     url_groq = "https://api.groq.com/openai/v1/chat/completions"
     headers_groq = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
     payload_groq = {
         "model": PRIMARY_MODEL,
         "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
-        "temperature": 1.2, "max_tokens": 80  # Поджали токены, чтобы точно влезть в лимит
+        "temperature": 1.2, "max_tokens": 80
     }
     
     try:
         logging.info(f"--> [Groq] Запрос к основной модели {PRIMARY_MODEL}...")
         response = requests.post(url_groq, headers=headers_groq, json=payload_groq, timeout=6)
         result = response.json()
-        if "choices" in result:
-            return result["choices"][0]["message"]["content"].strip()
-        else:
-            logging.error(f"--> [Groq Ошибка]: {result}")
+        if "choices" in result and result["choices"][0]["message"]["content"]:
+            text = result["choices"][0]["message"]["content"].strip()
+            if text: return text
+        logging.error(f"--> [Groq Ошибка/Пусто]: {result}")
     except Exception as e:
         logging.error(f"--> [Groq Исключение]: {e}")
 
-    # --- Попытка 2: OpenRouter (Бесплатная Llama) ---
+    # --- Попытка 2: OpenRouter ---
     url_or = "https://openrouter.ai/api/v1/chat/completions"
     headers_or = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
     payload_or = {
@@ -92,10 +89,10 @@ def get_ai_joke(prompt: str) -> str:
         logging.info(f"--> [OpenRouter] Пробую резерв {FALLBACK_MODEL}...")
         response = requests.post(url_or, headers=headers_or, json=payload_or, timeout=6)
         result = response.json()
-        if "choices" in result:
-            return result["choices"][0]["message"]["content"].strip()
-        else:
-            logging.error(f"--> [OpenRouter Резерв Ошибка]: {result}")
+        if "choices" in result and result["choices"][0]["message"]["content"]:
+            text = result["choices"][0]["message"]["content"].strip()
+            if text: return text
+        logging.error(f"--> [OpenRouter Резерв Ошибка/Пусто]: {result}")
     except Exception as e:
         logging.error(f"--> [OpenRouter Резерв Исключение]: {e}")
 
@@ -110,17 +107,29 @@ class Signal:
     def set(self): 
         self._flag = True
 
-# --- ВЫНОСИМ ФУНКЦИИ ХЭНДЛЕРОВ ИЗ ПОТОКА ---
+
+# --- КОМАНДЫ БОТА ---
 async def cmd_start(message: types.Message):
     await message.answer("ебать короче я роботаю")
 
+# НАША НОВАЯ КОМАНДА СБРОСА ПАМЯТИ
+async def cmd_reset(message: types.Message):
+    chat_id = message.chat.id
+    activity = shared_data.CHATS_ACTIVITY
+    
+    if chat_id in activity:
+        activity[chat_id]["context"] = [] # Полностью чистим историю для этого чата
+        
+    logging.info(f"🧹 Контекст чата {chat_id} был успешно сброшен командой /reset.")
+    await message.reply("ладно ладно проехали че там у вас нового")
+
+
 async def handle_chat(message: types.Message):
-    # ПЕРВАЯ И САМАЯ ВАЖНАЯ СТРОЧКА: если сообщение от любого бота — игнорируем!
+    # Если сообщение от любого бота — игнорируем!
     if message.from_user and message.from_user.is_bot:
         return
 
     chat_id = message.chat.id
-    # ... дальше идет твой остальной код
     user_name = message.from_user.first_name if message.from_user else "Кто-то"
     
     content_type = "text"
@@ -153,13 +162,11 @@ async def handle_chat(message: types.Message):
 
     logging.info(f"!!! БОТ УВИДЕЛ СООБЩЕНИЕ ({content_type}): '{msg_log_text}' от {user_name}")
 
-    # ИСПОЛЬЗУЕМ СЛОВАРЬ ИЗ shared_data ВМЕСТО st.session_state
     activity = shared_data.CHATS_ACTIVITY
     if chat_id not in activity:
         activity[chat_id] = {"last_message_time": datetime.now(), "context": []}
     
     activity[chat_id]["last_message_time"] = datetime.now()
-    
     log_to_context = msg_log_text if content_type == "text" else f"отправил {content_type}"
     
     activity[chat_id]["context"].append({
@@ -179,7 +186,6 @@ async def handle_chat(message: types.Message):
     is_name_called = "тимур" in text_lower
     random_strike = random.random() < CHANCE_TO_REPLY
 
-# Бот отвечает ТОЛЬКО если автору сообщения НЕ равен ID самого бота
     if message.from_user.id != bot_info.id and (is_mentioned_via_dog or is_reply_to_bot or is_name_called or random_strike):
         current_time = time.time()
         
@@ -210,6 +216,11 @@ async def handle_chat(message: types.Message):
             prompt += f"Напиши короткий ответ от лица Тимура лично для [{user_name}]:"
             
             reply_text = get_ai_joke(prompt)
+            
+            # Железный фикс пустого текста: если нейросеть выдала пустоту, ставим замену вручную
+            if not reply_text or reply_text.strip() == "":
+                reply_text = random.choice(LOCAL_REPLIES)
+                
             delay = max(1.5, min(4.0, len(reply_text) / 25))
                 
             await asyncio.sleep(delay)
@@ -231,7 +242,9 @@ def start_bot_thread(stop_signal):
     bot = Bot(token=TELEGRAM_TOKEN)
     dp = Dispatcher()
 
+    # Регистрация команд
     dp.message.register(cmd_start, Command("start"))
+    dp.message.register(cmd_reset, Command("reset"))  # Зарегистрировали команду /reset
     dp.message.register(handle_chat) 
 
     async def check_stop_signal():
