@@ -15,10 +15,10 @@ logging.basicConfig(level=logging.INFO)
 import streamlit as st  # Убедись, что импорт streamlit есть вверху файла
 
 # ================= КОНФИГУРАЦИЯ =================
-TELEGRAM_TOKEN = ""
-GROQ_API_KEY = ""
+TELEGRAM_TOKEN = "8455818639:AAHDjQ9twBUEBu-bjyrbcJ0vumtyGDYpE_k"
+GROQ_API_KEY = "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"
 
-OPENROUTER_API_KEY = st.secrets[""]
+OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]
 
 # Меняем на модели, которые на 100% бесплатны и стабильны прямо сейчас
 PRIMARY_MODEL = "meta-llama/llama-3-8b-instruct:free"        
@@ -111,10 +111,12 @@ async def cmd_start(message: types.Message):
     await message.answer("ебать короче я роботаю")
 
 async def handle_chat(message: types.Message):
+    # ПЕРВАЯ И САМАЯ ВАЖНАЯ СТРОЧКА: если сообщение от любого бота — игнорируем!
     if message.from_user and message.from_user.is_bot:
         return
 
     chat_id = message.chat.id
+    # ... дальше идет твой остальной код
     user_name = message.from_user.first_name if message.from_user else "Кто-то"
     
     content_type = "text"
@@ -173,7 +175,8 @@ async def handle_chat(message: types.Message):
     is_name_called = "тимур" in text_lower
     random_strike = random.random() < CHANCE_TO_REPLY
 
-    if is_mentioned_via_dog or is_reply_to_bot or is_name_called or random_strike:
+# Бот отвечает ТОЛЬКО если автору сообщения НЕ равен ID самого бота
+    if message.from_user.id != bot_info.id and (is_mentioned_via_dog or is_reply_to_bot or is_name_called or random_strike):
         current_time = time.time()
         
         global LOCAL_LAST_REPLY_TIME
