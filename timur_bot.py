@@ -12,13 +12,18 @@ import requests
 
 logging.basicConfig(level=logging.INFO)
 
+import streamlit as st  # Убедись, что импорт streamlit есть вверху файла
+
 # ================= КОНФИГУРАЦИЯ =================
 TELEGRAM_TOKEN = "8455818639:AAEvMCnXthyxT-UMMvzwd1WRKAa3BMqdkQ0"
 GROQ_API_KEY = "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"
-OPENROUTER_API_KEY = "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"
 
-PRIMARY_MODEL = "google/gemini-2.5-flash"  
-FALLBACK_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
+# ТЕПЕРЬ БОТ БЕРЕТ КЛЮЧ ИЗ НАСТРОЕК СТРИМЛИТА, В КОДЕ ЕГО БОЛЬШЕ НЕТ:
+OPENROUTER_API_KEY = st.secrets["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"]
+
+PRIMARY_MODEL = "google/gemini-2.5-flash"        
+FALLBACK_MODEL = "meta-llama/llama-3.3-70b-instruct:free"  
+# ================================================
 
 SYSTEM_PROMPT = (
     "Ты — 14-летний подросток по имени Тимур. Ты общаешься в Telegram-чате с друзьями. "
