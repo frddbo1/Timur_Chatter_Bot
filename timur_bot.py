@@ -21,7 +21,7 @@ GROQ_API_KEY = "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"
 OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]
 
 # Самые стабильные и неубиваемые модели на OpenRouter
-PRIMARY_MODEL = "llama3-8b-8192"  # Это для Groq (жрёт очень мало токенов лимита)
+PRIMARY_MODEL = "mistral-nemo"  # Это для Groq (жрёт очень мало токенов лимита)
 FALLBACK_MODEL = "meta-llama/llama-3-8b-instruct:free"
 # ================================================
 
