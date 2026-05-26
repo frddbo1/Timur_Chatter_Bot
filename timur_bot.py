@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 
 # ================= КОНФИГУРАЦИЯ =================
 TELEGRAM_TOKEN = "8455818639:AAHDjQ9twBUEBu-bjyrbcJ0vumtyGDYpE_k"
-GROQ_API_KEY = "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"
+GROQ_API_KEY = "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"
 
 OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]
 
